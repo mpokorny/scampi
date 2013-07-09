@@ -1,0 +1,6 @@
+*~
+target/
+.sbtboot/
+.history
+src/test/resources/test.properties
+src/test/resources/path.jar
