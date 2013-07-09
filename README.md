@@ -1,7 +1,7 @@
 ScaMPI: a Scala language interface to MPI-2
 ===========================================
 
-ScaMPI does not provide an implementation of MPI; rather, it provides an interface to existing MPI libraries. Currently, the only MPI library tested is [mpich](http://www.mpich.org "mpich"), although it is likely that other, mpich-derived implementations would also work. Additional implementation libraries could be added with little additional Scala code. [BridJ](http://code.google.com/p/bridj "BridJ") is used for the glue between Scala and the MPI library, however, the code generation features of BridJ are not used given the well-defined MPI API.
+ScaMPI does not provide an implementation of MPI; rather, it provides an interface to existing MPI libraries. Currently, the only MPI library tested is [mpich](http://www.mpich.org "mpich"), although it is likely that other, mpich-derived implementations would also work. Additional implementation libraries could be added with little additional Scala code. [BridJ](http://code.google.com/p/bridj "BridJ") is used for the glue between Scala and the MPI library; however, the code generation features of BridJ are not used given the well-defined MPI API.
 
 Installation
 ------------
