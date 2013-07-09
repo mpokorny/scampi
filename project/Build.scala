@@ -30,6 +30,7 @@ object ScampiBuild extends Build {
           // build the main and test jars during the build because apparently
           // only jars work in the pathing jar's "Class-Path" attribute (see
           // exportJars setting in ../build.sbt).
+          if (!dir.exists) dir.mkdir()
           val propertiesFile = buildFile(dir, "test.properties")
           val writer = new java.io.FileWriter(propertiesFile)
           val properties = List(
