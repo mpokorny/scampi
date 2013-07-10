@@ -35,7 +35,9 @@ class ScampiSpecification extends Specification {
         properties.getProperty("command").trim,
         List(
           "-classpath",
-          properties.getProperty("pathJarPath").trim,
+          List(
+            properties.getProperty("classDir"),
+            properties.getProperty("pathJarPath").trim).mkString(":"),
           "org.truffulatree.scampi2." + objectName),
         numProcesses,
         mpi2.InfoNull,

@@ -14,7 +14,7 @@ organization := "org.truffulatree"
 
 scalaVersion := "2.10.2"
 
-scalaHome := Some(file("/opt/scala-2.10.2"))
+scalaHome in Test := Some(file("/opt/scala-2.10.2"))
 
 // We need the export jars in the build because of the way we pass the classpath
 // to spawned processes (see project/Build.sbt)
@@ -41,9 +41,12 @@ compileOrder := CompileOrder.JavaThenScala
 initialCommands in console := """|val mpi2 = org.truffulatree.scampi2.mpi2;
                                  |mpi2.init()""".stripMargin
 
-test in Test <<= (test in Test, testProperties in Test) map { (test, mkProp) =>
-  mkProp
-  test
-}
+resourceGenerators in Test <+= (
+  resourceManaged in Test,
+  scalaHome in Test,
+  classDirectory in Test,
+  dependencyClasspath in Test) map {
+    (dir, home, cd, cp) => testResources(dir, home, cd, cp)
+  }
 
 testOptions in Test += Tests.Filter(_.endsWith("Spec"))
