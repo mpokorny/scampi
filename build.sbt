@@ -49,4 +49,4 @@ resourceGenerators in Test <+= (
     (dir, home, cd, cp) => testResources(dir, home, cd, cp)
   }
 
-testOptions in Test += Tests.Filter(_.endsWith("Spec"))
+testOptions in Test += Tests.Filter(_.endsWith("CacheSpec"))

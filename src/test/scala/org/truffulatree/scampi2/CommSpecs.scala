@@ -17,14 +17,14 @@ class CommSpec extends ScampiSpecification {
       val c = mpi2.Comm.self.dup
       mpi2.Comm(c.handle) must_== mpi2.Comm(c.handle)
     }
-    "have Comm.world correspond to MPI_COMM_WORLD" in {
-      mpi2.Comm.world.handle must_== mpi2.lib.MPI_COMM_WORLD
-    }
-    "have Comm.self correspond to MPI_COMM_SELF" in {
-      mpi2.Comm.self.handle must_== mpi2.lib.MPI_COMM_SELF
-    }
-    "not support instantiation of MPI_COMM_NULL" in {
-      mpi2.Comm(mpi2.lib.MPI_COMM_NULL) must throwA[mpi2.Exception]
-    }
+    // "have Comm.world correspond to MPI_COMM_WORLD" in {
+    //   mpi2.Comm.world.handle must_== mpi2.lib.MPI_COMM_WORLD
+    // }
+    // "have Comm.self correspond to MPI_COMM_SELF" in {
+    //   mpi2.Comm.self.handle must_== mpi2.lib.MPI_COMM_SELF
+    // }
+    // "not support instantiation of MPI_COMM_NULL" in {
+    //   mpi2.Comm(mpi2.lib.MPI_COMM_NULL) must throwA[mpi2.Exception]
+    // }
   }
 }

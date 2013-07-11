@@ -77,10 +77,10 @@ trait Mpi2LibraryComponent {
 
   trait Mpi2Library {
     // Types
-    type MPI_Datatype = Int
-    type MPI_Comm = Int
+    type MPI_Datatype
+    type MPI_Comm
     type MPI_Group
-    type MPI_Win = Int
+    type MPI_Win
     type MPI_File
     type MPI_Op
     type MPI_Status <: CStatus
@@ -335,10 +335,10 @@ trait Mpi2LibraryComponent {
       def apply(
         t: MPI_Comm,
         keyval: Int,
-	extraState: Pointer[_],
-	attributeValIn: Pointer[_],
-	attributeValOut: Pointer[Pointer[_]],
-	flag: Pointer[Int]): Int
+        extraState: Pointer[_],
+        attributeValIn: Pointer[_],
+        attributeValOut: Pointer[Pointer[_]],
+        flag: Pointer[Int]): Int
     }
 
     abstract class MPI_Type_copy_attr_function
@@ -346,10 +346,10 @@ trait Mpi2LibraryComponent {
       def apply(
         t: MPI_Datatype,
         keyval: Int,
-	extraState: Pointer[_],
-	attributeValIn: Pointer[_],
-	attributeValOut: Pointer[Pointer[_]],
-	flag: Pointer[Int]): Int
+        extraState: Pointer[_],
+        attributeValIn: Pointer[_],
+        attributeValOut: Pointer[Pointer[_]],
+        flag: Pointer[Int]): Int
     }
 
     abstract class MPI_Win_copy_attr_function
@@ -357,10 +357,10 @@ trait Mpi2LibraryComponent {
       def apply(
         t: MPI_Win,
         keyval: Int,
-	extraState: Pointer[_],
-	attributeValIn: Pointer[_],
-	attributeValOut: Pointer[Pointer[_]],
-	flag: Pointer[Int]): Int
+        extraState: Pointer[_],
+        attributeValIn: Pointer[_],
+        attributeValOut: Pointer[Pointer[_]],
+        flag: Pointer[Int]): Int
     }
 
     abstract class MPI_Comm_delete_attr_function
@@ -368,8 +368,8 @@ trait Mpi2LibraryComponent {
       def apply(
         t: MPI_Comm,
         keyval: Int,
-	attributeVal: Pointer[_],
-	extraState: Pointer[_]): Int
+        attributeVal: Pointer[_],
+        extraState: Pointer[_]): Int
     }
 
     abstract class MPI_Type_delete_attr_function
@@ -377,8 +377,8 @@ trait Mpi2LibraryComponent {
       def apply(
         t: MPI_Datatype,
         keyval: Int,
-	attributeVal: Pointer[_],
-	extraState: Pointer[_]): Int
+        attributeVal: Pointer[_],
+        extraState: Pointer[_]): Int
     }
 
     abstract class MPI_Win_delete_attr_function
@@ -386,31 +386,31 @@ trait Mpi2LibraryComponent {
       def apply(
         t: MPI_Win,
         keyval: Int,
-	attributeVal: Pointer[_],
-	extraState: Pointer[_]): Int
+        attributeVal: Pointer[_],
+        extraState: Pointer[_]): Int
     }
 
     abstract class MPI_Comm_errhandler_function
         extends Callback[MPI_Comm_errhandler_function] {
-      def apply(t: Pointer[MPI_Comm], errorcode: Pointer[Int])
+      def apply(t: Pointer[MPI_Comm], errorcode: Pointer[Int]): Unit
     }
 
     abstract class MPI_Win_errhandler_function
         extends Callback[MPI_Win_errhandler_function] {
-      def apply(t: Pointer[MPI_Win], errorcode: Pointer[Int])
+      def apply(t: Pointer[MPI_Win], errorcode: Pointer[Int]): Unit
     }
 
     abstract class MPI_File_errhandler_function
         extends Callback[MPI_File_errhandler_function] {
-      def apply(t: Pointer[MPI_File], errorcode: Pointer[Int])
+      def apply(t: Pointer[MPI_File], errorcode: Pointer[Int]): Unit
     }
 
     abstract class MPI_User_function extends Callback[MPI_User_function] {
       def apply(
         invec: Pointer[_],
         inoutvec: Pointer[_],
-	len: Pointer[Int],
-	datatype: Pointer[MPI_Datatype])
+        len: Pointer[Int],
+        datatype: Pointer[MPI_Datatype]): Unit
     }
 
     abstract class MPI_Grequest_cancel_function
@@ -432,11 +432,11 @@ trait Mpi2LibraryComponent {
         extends Callback[MPI_Datarep_conversion_function] {
       def apply(
         userbuf: Pointer[_],
-	datatype: MPI_Datatype,
+        datatype: MPI_Datatype,
         count: Int,
-	filebuf: Pointer[_],
-	position: MPI_Offset,
-	extraState: Pointer[_]): Int
+        filebuf: Pointer[_],
+        position: MPI_Offset,
+        extraState: Pointer[_]): Int
     }
 
     abstract class MPI_Datarep_extent_function
@@ -447,36 +447,15 @@ trait Mpi2LibraryComponent {
         extraState: Pointer[_]): Int
     }
 
-    trait DupAttrFunction[T] {
-      def apply(a: T, keyval: Int, extraState: Pointer[_],
-	attributeValIn: Pointer[_], attributeValOut: Pointer[Pointer[_]],
-	flag: Pointer[Int]): Int = {
-        flag.set(1)
-        attributeValOut.set(attributeValIn)
-        MPI_SUCCESS
-      }
-    }
-    val MPI_COMM_NULL_COPY_FN = Pointer.pointerToAddress(
-      0, classOf[MPI_Comm_copy_attr_function], noRelease)
-    val MPI_COMM_NULL_DELETE_FN = Pointer.pointerToAddress(
-      0, classOf[MPI_Comm_delete_attr_function], noRelease)
-    private lazy val commDupFn: MPI_Comm_copy_attr_function =
-      new MPI_Comm_copy_attr_function with DupAttrFunction[MPI_Comm]
-    lazy val MPI_COMM_DUP_FN = Pointer.pointerTo(commDupFn)
-    val MPI_WIN_NULL_COPY_FN = Pointer.pointerToAddress(
-      0, classOf[MPI_Win_copy_attr_function], noRelease)
-    val MPI_WIN_NULL_DELETE_FN = Pointer.pointerToAddress(
-      0, classOf[MPI_Win_delete_attr_function], noRelease)
-    private lazy val winDupFn: MPI_Win_copy_attr_function =
-      new MPI_Win_copy_attr_function with DupAttrFunction[MPI_Win]
-    lazy val MPI_WIN_DUP_FN = Pointer.pointerTo(winDupFn)
-    val MPI_TYPE_NULL_COPY_FN = Pointer.pointerToAddress(
-      0, classOf[MPI_Type_copy_attr_function], noRelease)
-    val MPI_TYPE_NULL_DELETE_FN = Pointer.pointerToAddress(
-      0, classOf[MPI_Type_delete_attr_function], noRelease)
-    private lazy val typeDupFn: MPI_Type_copy_attr_function =
-      new MPI_Type_copy_attr_function with DupAttrFunction[MPI_Datatype]
-    lazy val MPI_TYPE_DUP_FN = Pointer.pointerTo(typeDupFn)
+    // val MPI_COMM_NULL_COPY_FN: Pointer[MPI_Comm_copy_attr_function]
+    // val MPI_COMM_NULL_DELETE_FN: Pointer[MPI_Comm_delete_attr_function]
+    // val MPI_COMM_DUP_FN: Pointer[MPI_Comm_copy_attr_function]
+    // val MPI_WIN_NULL_COPY_FN: Pointer[MPI_Win_copy_attr_function]
+    // val MPI_WIN_NULL_DELETE_FN: Pointer[MPI_Win_delete_attr_function]
+    // val MPI_WIN_DUP_FN: Pointer[MPI_Win_copy_attr_function]
+    // val MPI_TYPE_NULL_COPY_FN: Pointer[MPI_Type_copy_attr_function]
+    // val MPI_TYPE_NULL_DELETE_FN: Pointer[MPI_Type_delete_attr_function]
+    // val MPI_TYPE_DUP_FN: Pointer[MPI_Type_copy_attr_function]
 
     // A.2.1 Point-to-Point Communication C Bindings
 

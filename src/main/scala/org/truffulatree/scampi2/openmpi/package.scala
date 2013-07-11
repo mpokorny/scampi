@@ -7,6 +7,6 @@
 //
 package org.truffulatree.scampi2
 
-package object mpich {
+package object openmpi {
   lazy val mpi2 = new Scampi2 with LibraryComponent
 }

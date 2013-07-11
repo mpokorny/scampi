@@ -48,6 +48,7 @@ trait CommComponent {
       result(0) = mpi2.lib.MPI_COMM_NULL
       result
     }
+
     final def handle = handlePtr(0)
 
     // override def equals(other: Any): Boolean = {

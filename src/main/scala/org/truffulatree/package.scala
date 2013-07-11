@@ -34,6 +34,7 @@ package object scampi2 {
 
   lazy val mpi2: Scampi2 with Mpi2LibraryComponent = {
     if (libraryName == "mpich") mpich.mpi2
+    else if (libraryName == "openmpi") openmpi.mpi2
     else throw new Exception(
       s"Unimplemented MPI2 library interface: ${libraryName}")
   }

@@ -10,7 +10,7 @@ package org.truffulatree.scampi2.mpich;
 import org.bridj.Pointer;
 import org.bridj.TypedPointer;
 
-public class Callbacks {
+public class TypedPointers {
     public static class MPI_File extends TypedPointer {
 	public MPI_File(long address) {
 	    super(address);

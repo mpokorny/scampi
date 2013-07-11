@@ -5,7 +5,7 @@
 // v. 2.0. If a copy of the MPL was not distributed with this file, You can
 // obtain one at http://mozilla.org/MPL/2.0/.
 //
-package org.truffulatree.scampi2.mpich
+package org.truffulatree.scampi2.openmpi
 
 import org.truffulatree.scampi2._
 import org.bridj.{BridJ, Pointer, TypedPointer, CRuntime, StructObject,
@@ -24,24 +24,32 @@ trait LibraryComponent
 
   val offsetAlignment = AlignHelper.longAlignment
 
-  def allocateDatatype(n: Int = 1) = Pointer.allocateInts(n).as(classOf[Int])
+  def allocateDatatype(n: Int = 1) =
+    Pointer.allocateTypedPointers(classOf[lib.MPI_Datatype], n)
 
-  def allocateComm(n: Int = 1) = Pointer.allocateInts(n).as(classOf[Int])
+  def allocateComm(n: Int = 1) =
+    Pointer.allocateTypedPointers(classOf[lib.MPI_Comm], n)
 
-  def allocateGroup(n: Int = 1) = Pointer.allocateInts(n).as(classOf[Int])
+  def allocateGroup(n: Int = 1) =
+    Pointer.allocateTypedPointers(classOf[lib.MPI_Group], n)
 
-  def allocateWin(n: Int = 1) = Pointer.allocateInts(n).as(classOf[Int])
+  def allocateWin(n: Int = 1) =
+    Pointer.allocateTypedPointers(classOf[lib.MPI_Win], n)
 
   def allocateFile(n: Int = 1) =
     Pointer.allocateTypedPointers(classOf[lib.MPI_File], n)
 
-  def allocateOp(n: Int = 1) = Pointer.allocateInts(n).as(classOf[Int])
+  def allocateOp(n: Int = 1) =
+    Pointer.allocateTypedPointers(classOf[lib.MPI_Op], n)
 
-  def allocateErrhandler(n: Int = 1) = Pointer.allocateInts(n).as(classOf[Int])
+  def allocateErrhandler(n: Int = 1) =
+    Pointer.allocateTypedPointers(classOf[lib.MPI_Errhandler], n)
 
-  def allocateRequest(n: Int = 1) = Pointer.allocateInts(n).as(classOf[Int])
+  def allocateRequest(n: Int = 1) =
+    Pointer.allocateTypedPointers(classOf[lib.MPI_Request], n)
 
-  def allocateInfo(n: Int = 1) = Pointer.allocateInts(n).as(classOf[Int])
+  def allocateInfo(n: Int = 1) =
+    Pointer.allocateTypedPointers(classOf[lib.MPI_Info], n)
 
   def allocateAint(n: Int = 1) = Pointer.allocateCLongs(n)
 
@@ -59,53 +67,62 @@ trait LibraryComponent
 
   protected def _offsetFromLong(long: Long): lib.MPI_Offset = long
 
-  @Library("mpich")
+  @Library("mpi")
   @Runtime(classOf[CRuntime])
   final object lib extends Mpi2Library {
     BridJ.register()
 
-    type MPI_Datatype = Int
-    type MPI_Comm = Int
-    type MPI_Group = Int
-    type MPI_Win = Int
+    private lazy val nativeLibrary = {
+      val result = BridJ.getNativeLibrary(this.getClass)
+      val file = BridJ.getNativeLibraryFile(BridJ.getNativeLibraryName(this.getClass))
+      println(s"${file}")
+      result
+    }
+
+    private def getSymbolPointer(name: String): Pointer[_] =
+      nativeLibrary.getSymbolPointer(name)
+
+    type MPI_Datatype = TypedPointers.MPI_Datatype
+    type MPI_Comm = TypedPointers.MPI_Comm
+    type MPI_Group = TypedPointers.MPI_Group
+    type MPI_Win = TypedPointers.MPI_Win
     type MPI_File = TypedPointers.MPI_File
-    type MPI_Op = Int
+    type MPI_Op = TypedPointers.MPI_Op
     final class MPI_Status(peer: Pointer[MPI_Status])
         extends StructObject(peer) with CStatus {
       val sizeOf = typeInfo.sizeOf
       @Field(0)
-      def count = io.getIntField(this, 0)
+      def MPI_SOURCE: Int = io.getIntField(this, 0)
       @Field(0)
-      def count_=(x: Int) {
+      def MPI_SOURCE_=(x: Int) {
 	io.setIntField(this, 0, x)
       }
       @Field(1)
-      def cancelled = io.getIntField(this, 1)
+      def MPI_TAG: Int = io.getIntField(this, 1)
       @Field(1)
-      def cancelled_=(x: Int) {
+      def MPI_TAG_=(x: Int) {
 	io.setIntField(this, 1, x)
       }
       @Field(2)
-      def MPI_SOURCE: Int = io.getIntField(this, 2)
+      def MPI_ERROR: Int = io.getIntField(this, 2)
       @Field(2)
-      def MPI_SOURCE_=(x: Int) {
+      def MPI_ERROR_=(x: Int) {
 	io.setIntField(this, 2, x)
       }
       @Field(3)
-      def MPI_TAG: Int = io.getIntField(this, 3)
+      private def cancelled = io.getIntField(this, 3)
       @Field(3)
-      def MPI_TAG_=(x: Int) {
+      private def cancelled_=(x: Int) {
 	io.setIntField(this, 3, x)
       }
       @Field(4)
-      def MPI_ERROR: Int = io.getIntField(this, 4)
+      private def ucount = io.getCLongField(this, 4)
       @Field(4)
-      def MPI_ERROR_=(x: Int) {
-	io.setIntField(this, 4, x)
+      private def ucount_=(x: Long) {
+	io.setCLongField(this, 4, x)
       }
       override def toString =
-        s"""|MPI_Status(${count},${cancelled},${MPI_SOURCE},
-            |${MPI_TAG},${MPI_ERROR})""".stripMargin
+        s"MPI_Status(${MPI_SOURCE},${MPI_TAG},${MPI_ERROR})"
     }
     object MpiStatus {
       def apply(peer: Pointer[MPI_Status]) = new MPI_Status(peer)
@@ -116,9 +133,9 @@ trait LibraryComponent
       }
       val sizeOf = (new MPI_Status(MPI_STATUS_IGNORE)).sizeOf
     }
-    type MPI_Request = Int
-    type MPI_Errhandler = Int
-    type MPI_Info = Int
+    type MPI_Request = TypedPointers.MPI_Request
+    type MPI_Errhandler = TypedPointers.MPI_Errhandler
+    type MPI_Info = TypedPointers.MPI_Info
     type MPI_Aint = CLong
     type MPI_Offset = Long
 
@@ -128,139 +145,208 @@ trait LibraryComponent
     val MPI_SIMILAR = 2
     val MPI_UNEQUAL = 3
 
-    val MPI_CHAR = 0x4c000101
-    val MPI_SIGNED_CHAR = 0x4c000118
-    val MPI_UNSIGNED_CHAR = 0x4c000102
-    val MPI_BYTE = 0x4c00010d
-    val MPI_WCHAR = 0x4c00040e
-    val MPI_SHORT = 0x4c000203
-    val MPI_UNSIGNED_SHORT = 0x4c000204
-    val MPI_INT = 0x4c000405
-    val MPI_UNSIGNED = 0x4c000406
-    val MPI_LONG = 0x4c000807
-    val MPI_UNSIGNED_LONG = 0x4c000808
-    val MPI_FLOAT = 0x4c00040a
-    val MPI_DOUBLE = 0x4c00080b
-    val MPI_LONG_DOUBLE = 0x4c00100c
-    val MPI_LONG_LONG_INT = 0x4c000809
-    val MPI_UNSIGNED_LONG_LONG = 0x4c000819
-    val MPI_LONG_LONG = MPI_LONG_LONG_INT
-    val MPI_PACKED = 0x4c00010f
-    val MPI_LB = 0x4c000010
-    val MPI_UB = 0x4c000011
-    val MPI_FLOAT_INT = 0x8c000000
-    val MPI_DOUBLE_INT = 0x8c000001
-    val MPI_LONG_INT = 0x8c000002
-    val MPI_SHORT_INT = 0x8c000003
-    val MPI_2INT = 0x4c000816
-    val MPI_LONG_DOUBLE_INT = 0x8c000004
-    val MPI_INT8_T = 0x4c000137
-    val MPI_INT16_T = 0x4c000238
-    val MPI_INT32_T = 0x4c000439
-    val MPI_INT64_T = 0x4c00083a
-    val MPI_UINT8_T = 0x4c00013b
-    val MPI_UINT16_T = 0x4c00023c
-    val MPI_UINT32_T = 0x4c00043d
-    val MPI_UINT64_T = 0x4c00083e
-    val MPI_C_BOOL = 0x4c00013f
-    val MPI_C_FLOAT_COMPLEX = 0x4c000840
-    val MPI_C_COMPLEX = MPI_C_FLOAT_COMPLEX
-    val MPI_C_DOUBLE_COMPLEX = 0x4c001041
-    val MPI_C_LONG_DOUBLE_COMPLEX = 0x4c002042
-    val MPI_AINT = 0x4c000843
-    val MPI_OFFSET = 0x4c000844
+    lazy val MPI_CHAR =
+      new TypedPointers.MPI_Datatype(getSymbolPointer("ompi_mpi_char"))
+    lazy val MPI_SIGNED_CHAR =
+      new TypedPointers.MPI_Datatype(getSymbolPointer("ompi_mpi_signed_char"))
+    lazy val MPI_UNSIGNED_CHAR =
+      new TypedPointers.MPI_Datatype(getSymbolPointer("ompi_mpi_unsigned_char"))
+    lazy val MPI_BYTE =
+      new TypedPointers.MPI_Datatype(getSymbolPointer("ompi_mpi_byte"))
+    lazy val MPI_WCHAR =
+      new TypedPointers.MPI_Datatype(getSymbolPointer("ompi_mpi_wchar"))
+    lazy val MPI_SHORT =
+      new TypedPointers.MPI_Datatype(getSymbolPointer("ompi_mpi_short"))
+    lazy val MPI_UNSIGNED_SHORT =
+      new TypedPointers.MPI_Datatype(getSymbolPointer("ompi_mpi_unsigned_short"))
+    lazy val MPI_INT =
+      new TypedPointers.MPI_Datatype(getSymbolPointer("ompi_mpi_int"))
+    lazy val MPI_UNSIGNED =
+      new TypedPointers.MPI_Datatype(getSymbolPointer("ompi_mpi_unsigned"))
+    lazy val MPI_LONG =
+      new TypedPointers.MPI_Datatype(getSymbolPointer("ompi_mpi_long"))
+    lazy val MPI_UNSIGNED_LONG =
+      new TypedPointers.MPI_Datatype(getSymbolPointer("ompi_mpi_unsigned_long"))
+    lazy val MPI_FLOAT =
+      new TypedPointers.MPI_Datatype(getSymbolPointer("ompi_mpi_float"))
+    lazy val MPI_DOUBLE =
+      new TypedPointers.MPI_Datatype(getSymbolPointer("ompi_mpi_double"))
+    lazy val MPI_LONG_DOUBLE =
+      new TypedPointers.MPI_Datatype(getSymbolPointer("ompi_mpi_long_double"))
+    lazy val MPI_LONG_LONG_INT =
+      new TypedPointers.MPI_Datatype(getSymbolPointer("ompi_mpi_long_long_int"))
+    lazy val MPI_UNSIGNED_LONG_LONG =
+      new TypedPointers.MPI_Datatype(getSymbolPointer("ompi_mpi_unsigned_long_long"))
+    lazy val MPI_LONG_LONG =
+      new TypedPointers.MPI_Datatype(getSymbolPointer("ompi_mpi_long_long"))
+    lazy val MPI_PACKED =
+      new TypedPointers.MPI_Datatype(getSymbolPointer("ompi_mpi_packed"))
+    lazy val MPI_LB =
+      new TypedPointers.MPI_Datatype(getSymbolPointer("ompi_mpi_lb"))
+    lazy val MPI_UB =
+      new TypedPointers.MPI_Datatype(getSymbolPointer("ompi_mpi_ub"))
+    lazy val MPI_FLOAT_INT =
+      new TypedPointers.MPI_Datatype(getSymbolPointer("ompi_mpi_float_int"))
+    lazy val MPI_DOUBLE_INT =
+      new TypedPointers.MPI_Datatype(getSymbolPointer("ompi_mpi_double_int"))
+    lazy val MPI_LONG_INT =
+      new TypedPointers.MPI_Datatype(getSymbolPointer("ompi_mpi_long_int"))
+    lazy val MPI_SHORT_INT =
+      new TypedPointers.MPI_Datatype(getSymbolPointer("ompi_mpi_short_int"))
+    lazy val MPI_2INT =
+      new TypedPointers.MPI_Datatype(getSymbolPointer("ompi_mpi_2int"))
+    lazy val MPI_LONG_DOUBLE_INT =
+      new TypedPointers.MPI_Datatype(getSymbolPointer("ompi_mpi_longdbl_int"))
+    lazy val MPI_INT8_T =
+      new TypedPointers.MPI_Datatype(getSymbolPointer("ompi_mpi_int8_t"))
+    lazy val MPI_INT16_T =
+      new TypedPointers.MPI_Datatype(getSymbolPointer("ompi_mpi_int16_t"))
+    lazy val MPI_INT32_T =
+      new TypedPointers.MPI_Datatype(getSymbolPointer("ompi_mpi_int32_t"))
+    lazy val MPI_INT64_T =
+      new TypedPointers.MPI_Datatype(getSymbolPointer("ompi_mpi_int64_t"))
+    lazy val MPI_UINT8_T =
+      new TypedPointers.MPI_Datatype(getSymbolPointer("ompi_mpi_uint8_t"))
+    lazy val MPI_UINT16_T =
+      new TypedPointers.MPI_Datatype(getSymbolPointer("ompi_mpi_uint16_t"))
+    lazy val MPI_UINT32_T =
+      new TypedPointers.MPI_Datatype(getSymbolPointer("ompi_mpi_uint32_t"))
+    lazy val MPI_UINT64_T =
+      new TypedPointers.MPI_Datatype(getSymbolPointer("ompi_mpi_uint64_t"))
+    lazy val MPI_C_BOOL =
+      new TypedPointers.MPI_Datatype(getSymbolPointer("ompi_mpi_c_bool"))
+    lazy val MPI_C_FLOAT_COMPLEX =
+      new TypedPointers.MPI_Datatype(getSymbolPointer("ompi_mpi_c_float_complex"))
+    lazy val MPI_C_COMPLEX =
+      new TypedPointers.MPI_Datatype(getSymbolPointer("ompi_mpi_c_complex"))
+    lazy val MPI_C_DOUBLE_COMPLEX =
+      new TypedPointers.MPI_Datatype(getSymbolPointer("ompi_mpi_c_double_complex"))
+    lazy val MPI_C_LONG_DOUBLE_COMPLEX =
+      new TypedPointers.MPI_Datatype(getSymbolPointer("ompi_mpi_c_long_double_complex"))
+    lazy val MPI_AINT =
+      new TypedPointers.MPI_Datatype(getSymbolPointer("ompi_mpi_aint"))
+    lazy val MPI_OFFSET =
+      new TypedPointers.MPI_Datatype(getSymbolPointer("ompi_mpi_offset"))
 
-    val MPI_COMM_WORLD = 0x44000000
-    val MPI_COMM_SELF = 0x44000001
+    lazy val MPI_COMM_WORLD =
+      new TypedPointers.MPI_Comm(getSymbolPointer("ompi_mpi_comm_world"))
+    lazy val MPI_COMM_SELF =
+      new TypedPointers.MPI_Comm(getSymbolPointer("ompi_mpi_comm_self"))
 
-    val MPI_GROUP_EMPTY = 0x48000000
+    lazy val MPI_GROUP_EMPTY =
+      new TypedPointers.MPI_Group(getSymbolPointer("ompi_mpi_group_empty"))
 
-    val MPI_WIN_NULL = 0x20000000
+    lazy val MPI_WIN_NULL =
+      new TypedPointers.MPI_Win(getSymbolPointer("ompi_mpi_win_null"))
 
-    val MPI_FILE_NULL = Pointer.NULL.asInstanceOf[MPI_File]
+    lazy val MPI_FILE_NULL =
+      new TypedPointers.MPI_File(getSymbolPointer("ompi_mpi_file_null"))
 
-    val MPI_MAX = 0x58000001
-    val MPI_MIN = 0x58000002
-    val MPI_SUM = 0x58000003
-    val MPI_PROD = 0x58000004
-    val MPI_LAND = 0x58000005
-    val MPI_BAND = 0x58000006
-    val MPI_LOR = 0x58000007
-    val MPI_BOR = 0x58000008
-    val MPI_LXOR = 0x58000009
-    val MPI_BXOR = 0x5800000a
-    val MPI_MINLOC = 0x5800000b
-    val MPI_MAXLOC = 0x5800000c
-    val MPI_REPLACE = 0x5800000d
+    lazy val MPI_MAX =
+      new TypedPointers.MPI_Op(getSymbolPointer("ompi_mpi_op_max"))
+    lazy val MPI_MIN =
+      new TypedPointers.MPI_Op(getSymbolPointer("ompi_mpi_op_min"))
+    lazy val MPI_SUM =
+      new TypedPointers.MPI_Op(getSymbolPointer("ompi_mpi_op_sum"))
+    lazy val MPI_PROD =
+      new TypedPointers.MPI_Op(getSymbolPointer("ompi_mpi_op_prod"))
+    lazy val MPI_LAND =
+      new TypedPointers.MPI_Op(getSymbolPointer("ompi_mpi_op_land"))
+    lazy val MPI_BAND =
+      new TypedPointers.MPI_Op(getSymbolPointer("ompi_mpi_op_band"))
+    lazy val MPI_LOR =
+      new TypedPointers.MPI_Op(getSymbolPointer("ompi_mpi_op_lor"))
+    lazy val MPI_BOR =
+      new TypedPointers.MPI_Op(getSymbolPointer("ompi_mpi_op_bor"))
+    lazy val MPI_LXOR =
+      new TypedPointers.MPI_Op(getSymbolPointer("ompi_mpi_op_lxor"))
+    lazy val MPI_BXOR =
+      new TypedPointers.MPI_Op(getSymbolPointer("ompi_mpi_op_bxor"))
+    lazy val MPI_MINLOC =
+      new TypedPointers.MPI_Op(getSymbolPointer("ompi_mpi_op_minloc"))
+    lazy val MPI_MAXLOC =
+      new TypedPointers.MPI_Op(getSymbolPointer("ompi_mpi_op_maxloc"))
+    lazy val MPI_REPLACE =
+      new TypedPointers.MPI_Op(getSymbolPointer("ompi_mpi_op_replace"))
 
-    val MPI_TAG_UB = 0x64400001
-    val MPI_HOST = 0x64400003
-    val MPI_IO = 0x64400005
-    val MPI_WTIME_IS_GLOBAL = 0x64400007
-    val MPI_UNIVERSE_SIZE = 0x64400009
-    val MPI_LASTUSEDCODE = 0x6440000b
-    val MPI_APPNUM = 0x6440000d
-    val MPI_WIN_BASE = 0x66000001
-    val MPI_WIN_SIZE = 0x66000003
-    val MPI_WIN_DISP_UNIT = 0x66000005
+    val MPI_TAG_UB = 0
+    val MPI_HOST = 1
+    val MPI_IO = 2
+    val MPI_WTIME_IS_GLOBAL = 3
+    val MPI_UNIVERSE_SIZE = 6
+    val MPI_LASTUSEDCODE = 5
+    val MPI_APPNUM = 4
+    val MPI_WIN_BASE = 7
+    val MPI_WIN_SIZE = 8
+    val MPI_WIN_DISP_UNIT = 9
 
-    val MPI_COMM_NULL = 0x04000000
-    val MPI_OP_NULL = 0x18000000
-    val MPI_GROUP_NULL = 0x08000000
-    val MPI_DATATYPE_NULL = 0x0c000000
-    val MPI_REQUEST_NULL = 0x2c000000
-    val MPI_ERRHANDLER_NULL = 0x14000000
+    lazy val MPI_COMM_NULL =
+      new TypedPointers.MPI_Comm(getSymbolPointer("ompi_mpi_comm_null"))
+    lazy val MPI_OP_NULL =
+      new TypedPointers.MPI_Op(getSymbolPointer("ompi_mpi_op_null"))
+    lazy val MPI_GROUP_NULL =
+      new TypedPointers.MPI_Group(getSymbolPointer("ompi_mpi_group_null"))
+    lazy val MPI_DATATYPE_NULL =
+      new TypedPointers.MPI_Datatype(getSymbolPointer("ompi_mpi_datatype_null"))
+    lazy val MPI_REQUEST_NULL =
+      new TypedPointers.MPI_Request(getSymbolPointer("ompi_mpi_request_null"))
+    lazy val MPI_ERRHANDLER_NULL =
+      new TypedPointers.MPI_Errhandler(getSymbolPointer("ompi_mpi_errhandler_null"))
 
     val MPI_MAX_DATAREP_STRING = 128
-    val MPI_MAX_PROCESSOR_NAME = 128
-    val MPI_MAX_ERROR_STRING = 1024
-    val MPI_MAX_PORT_NAME = 256
-    val MPI_MAX_OBJECT_NAME = 128
+    val MPI_MAX_PROCESSOR_NAME = 256
+    val MPI_MAX_ERROR_STRING = 256
+    val MPI_MAX_PORT_NAME = 1024
+    val MPI_MAX_OBJECT_NAME = 64
     val MPI_UNDEFINED = -32766
-    val MPI_KEYVAL_INVALID = 0x24000000
-    val MPI_BSEND_OVERHEAD = 88
+    val MPI_KEYVAL_INVALID = -1
+    val MPI_BSEND_OVERHEAD = 128
 
     val MPI_BOTTOM = Pointer.pointerToAddress(0, 0, noRelease)
-    val MPI_UNWEIGHTED = Pointer.pointerToAddress(0, classOf[Int], noRelease)
+    lazy val MPI_UNWEIGHTED = ???
 
-    val MPI_PROC_NULL = -1
-    val MPI_ANY_SOURCE = -2
-    val MPI_ROOT = -3
+    val MPI_PROC_NULL = -2
+    val MPI_ANY_SOURCE = -1
+    val MPI_ROOT = -4
     val MPI_ANY_TAG = -1
 
-    val MPI_LOCK_EXCLUSIVE = 234
-    val MPI_LOCK_SHARED = 235
+    val MPI_LOCK_EXCLUSIVE = 1
+    val MPI_LOCK_SHARED = 2
 
-    val MPI_ERRORS_ARE_FATAL = 0x54000000
-    val MPI_ERRORS_RETURN = 0x54000001
+    val MPI_ERRORS_ARE_FATAL =
+      new TypedPointers.MPI_Errhandler(getSymbolPointer("ompi_mpi_errors_are_fatal"))
+    val MPI_ERRORS_RETURN =
+      new TypedPointers.MPI_Errhandler(getSymbolPointer("ompi_mpi_errors_return"))
 
-    val MPI_INFO_NULL = 0x1c000000
-    val MPI_MAX_INFO_KEY = 255
-    val MPI_MAX_INFO_VAL = 1024
+    lazy val MPI_INFO_NULL =
+      new TypedPointers.MPI_Info(getSymbolPointer("ompi_mpi_info_null"))
+    val MPI_MAX_INFO_KEY = 36
+    val MPI_MAX_INFO_VAL = 256
 
-    val MPI_ORDER_C = 56
-    val MPI_ORDER_FORTRAN = 57
-    val MPI_DISTRIBUTE_BLOCK = 121
-    val MPI_DISTRIBUTE_CYCLIC = 122
-    val MPI_DISTRIBUTE_NONE = 123
-    val MPI_DISTRIBUTE_DFLT_DARG = -49767
+    val MPI_ORDER_C = 0
+    val MPI_ORDER_FORTRAN = 1
+    val MPI_DISTRIBUTE_BLOCK = 0
+    val MPI_DISTRIBUTE_CYCLIC = 1
+    val MPI_DISTRIBUTE_NONE = 2
+    val MPI_DISTRIBUTE_DFLT_DARG = -1
 
-    val MPI_IN_PLACE = Pointer.pointerToAddress(-1, 0, noRelease)
+    val MPI_IN_PLACE = Pointer.pointerToAddress(1, 0, noRelease)
 
     val MPI_MODE_APPEND = 128
     val MPI_MODE_CREATE = 1
     val MPI_MODE_DELETE_ON_CLOSE = 16
     val MPI_MODE_EXCL = 64
-    val MPI_MODE_NOCHECK = 1024
-    val MPI_MODE_NOSTORE = 2048
-    val MPI_MODE_NOPUT = 4096
-    val MPI_MODE_NOPRECEDE = 8192
-    val MPI_MODE_NOSUCCEED = 16384
     val MPI_MODE_RDONLY = 2
     val MPI_MODE_RDWR = 8
     val MPI_MODE_SEQUENTIAL = 256
     val MPI_MODE_UNIQUE_OPEN = 32
     val MPI_MODE_WRONLY = 4
+
+    val MPI_MODE_NOCHECK = 1
+    val MPI_MODE_NOSTORE = 8
+    val MPI_MODE_NOPUT = 4
+    val MPI_MODE_NOPRECEDE = 2
+    val MPI_MODE_NOSUCCEED = 16
 
     val MPI_DISPLACEMENT_CURRENT = -54278278L
 
@@ -269,8 +355,9 @@ trait LibraryComponent
     val MPI_SEEK_END = 604
 
     val MPI_STATUS_IGNORE =
-      Pointer.pointerToAddress(1, classOf[MPI_Status], noRelease)
-    val MPI_STATUSES_IGNORE = MPI_STATUS_IGNORE
+      Pointer.pointerToAddress(0, classOf[MPI_Status], noRelease)
+    val MPI_STATUSES_IGNORE =
+      Pointer.pointerToAddress(0, classOf[MPI_Status], noRelease)
     val MPI_ERRCODES_IGNORE =
       Pointer.pointerToAddress(0, classOf[Int], noRelease)
 
@@ -284,28 +371,28 @@ trait LibraryComponent
     val MPI_THREAD_SERIALIZED = 2
     val MPI_THREAD_MULTIPLE = 3
 
-    val MPI_GRAPH = 1
-    val MPI_CART = 2
+    val MPI_GRAPH = 2
+    val MPI_CART = 1
     val MPI_DIST_GRAPH = 3
 
-    val MPI_COMBINER_NAMED = 1
-    val MPI_COMBINER_DUP = 2
-    val MPI_COMBINER_CONTIGUOUS = 3
-    val MPI_COMBINER_VECTOR = 4
-    val MPI_COMBINER_HVECTOR_INTEGER = 5
-    val MPI_COMBINER_HVECTOR = 6
-    val MPI_COMBINER_INDEXED = 7
-    val MPI_COMBINER_HINDEXED_INTEGER = 8
-    val MPI_COMBINER_HINDEXED = 9
-    val MPI_COMBINER_INDEXED_BLOCK = 10
-    val MPI_COMBINER_STRUCT_INTEGER = 11
-    val MPI_COMBINER_STRUCT = 12
-    val MPI_COMBINER_SUBARRAY = 13
-    val MPI_COMBINER_DARRAY = 14
-    val MPI_COMBINER_F90_REAL = 15
-    val MPI_COMBINER_F90_COMPLEX = 16
-    val MPI_COMBINER_F90_INTEGER = 17
-    val MPI_COMBINER_RESIZED = 18
+    val MPI_COMBINER_NAMED = 0
+    val MPI_COMBINER_DUP = 1
+    val MPI_COMBINER_CONTIGUOUS = 2
+    val MPI_COMBINER_VECTOR = 3
+    val MPI_COMBINER_HVECTOR_INTEGER = 4
+    val MPI_COMBINER_HVECTOR = 5
+    val MPI_COMBINER_INDEXED = 6
+    val MPI_COMBINER_HINDEXED_INTEGER = 7
+    val MPI_COMBINER_HINDEXED = 8
+    val MPI_COMBINER_INDEXED_BLOCK = 9
+    val MPI_COMBINER_STRUCT_INTEGER = 10
+    val MPI_COMBINER_STRUCT = 11
+    val MPI_COMBINER_SUBARRAY = 12
+    val MPI_COMBINER_DARRAY = 13
+    val MPI_COMBINER_F90_REAL = 14
+    val MPI_COMBINER_F90_COMPLEX = 15
+    val MPI_COMBINER_F90_INTEGER = 16
+    val MPI_COMBINER_RESIZED = 17
 
     val MPI_SUCCESS = 0
     val MPI_ERR_BUFFER = 1
@@ -314,86 +401,82 @@ trait LibraryComponent
     val MPI_ERR_TAG = 4
     val MPI_ERR_COMM = 5
     val MPI_ERR_RANK = 6
-    val MPI_ERR_ROOT = 7
-    val MPI_ERR_TRUNCATE = 14
-    val MPI_ERR_GROUP = 8
-    val MPI_ERR_OP = 9
-    val MPI_ERR_REQUEST = 19
-    val MPI_ERR_TOPOLOGY = 10
-    val MPI_ERR_DIMS = 11
-    val MPI_ERR_ARG = 12
-    val MPI_ERR_OTHER = 15
-    val MPI_ERR_UNKNOWN = 13
-    val MPI_ERR_INTERN = 16
-    val MPI_ERR_IN_STATUS = 17
-    val MPI_ERR_PENDING = 18
-    val MPI_ERR_FILE = 27
+    val MPI_ERR_REQUEST = 7
+    val MPI_ERR_ROOT = 8
+    val MPI_ERR_GROUP = 9
+    val MPI_ERR_OP = 10
+    val MPI_ERR_TOPOLOGY = 11
+    val MPI_ERR_DIMS = 12
+    val MPI_ERR_ARG = 13
+    val MPI_ERR_UNKNOWN = 14
+    val MPI_ERR_TRUNCATE = 15
+    val MPI_ERR_OTHER = 16
+    val MPI_ERR_INTERN = 17
+    val MPI_ERR_IN_STATUS = 18
+    val MPI_ERR_PENDING = 19
     val MPI_ERR_ACCESS = 20
     val MPI_ERR_AMODE = 21
-    val MPI_ERR_BAD_FILE = 22
-    val MPI_ERR_FILE_EXISTS = 25
-    val MPI_ERR_FILE_IN_USE = 26
-    val MPI_ERR_NO_SPACE = 36
-    val MPI_ERR_NO_SUCH_FILE = 37
-    val MPI_ERR_IO = 32
-    val MPI_ERR_READ_ONLY = 40
-    val MPI_ERR_CONVERSION = 23
-    val MPI_ERR_DUP_DATAREP = 24
-    val MPI_ERR_UNSUPPORTED_DATAREP = 43
-    val MPI_ERR_INFO = 28
-    val MPI_ERR_INFO_KEY = 29
-    val MPI_ERR_INFO_VALUE = 30
-    val MPI_ERR_INFO_NOKEY = 31
-    val MPI_ERR_NAME = 33
-    val MPI_ERR_NO_MEM = 34
-    val MPI_ERR_NOT_SAME = 35
-    val MPI_ERR_PORT = 38
-    val MPI_ERR_QUOTA = 39
-    val MPI_ERR_SERVICE = 41
-    val MPI_ERR_SPAWN = 42
-    val MPI_ERR_UNSUPPORTED_OPERATION = 44
-    val MPI_ERR_WIN = 45
-    val MPI_ERR_BASE = 46
-    val MPI_ERR_LOCKTYPE = 47
-    val MPI_ERR_KEYVAL = 48
-    val MPI_ERR_RMA_CONFLICT = 49
-    val MPI_ERR_RMA_SYNC = 50
-    val MPI_ERR_SIZE = 51
-    val MPI_ERR_DISP = 52
-    val MPI_ERR_ASSERT = 53
-    val MPI_ERR_LASTCODE = 0x3fffffff
+    val MPI_ERR_ASSERT = 22
+    val MPI_ERR_BAD_FILE = 23
+    val MPI_ERR_BASE = 24
+    val MPI_ERR_CONVERSION = 25
+    val MPI_ERR_DISP = 26
+    val MPI_ERR_DUP_DATAREP = 27
+    val MPI_ERR_FILE_EXISTS = 28
+    val MPI_ERR_FILE_IN_USE = 29
+    val MPI_ERR_FILE = 30
+    val MPI_ERR_INFO_KEY = 31
+    val MPI_ERR_INFO_NOKEY = 32
+    val MPI_ERR_INFO_VALUE = 33
+    val MPI_ERR_INFO = 34
+    val MPI_ERR_IO = 35
+    val MPI_ERR_KEYVAL = 36
+    val MPI_ERR_LOCKTYPE = 37
+    val MPI_ERR_NAME = 38
+    val MPI_ERR_NO_MEM = 39
+    val MPI_ERR_NOT_SAME = 40
+    val MPI_ERR_NO_SPACE = 41
+    val MPI_ERR_NO_SUCH_FILE = 42
+    val MPI_ERR_PORT = 43
+    val MPI_ERR_QUOTA = 44
+    val MPI_ERR_READ_ONLY = 45
+    val MPI_ERR_RMA_CONFLICT = 46
+    val MPI_ERR_RMA_SYNC = 47
+    val MPI_ERR_SERVICE = 48
+    val MPI_ERR_SIZE = 49
+    val MPI_ERR_SPAWN = 50
+    val MPI_ERR_UNSUPPORTED_DATAREP = 51
+    val MPI_ERR_UNSUPPORTED_OPERATION = 52
+    val MPI_ERR_WIN = 53
+    val MPI_ERR_LASTCODE = 54
 
-    // trait DupAttrFunction[T] {
-    //   def apply(a: T, keyval: Int, extraState: Pointer[_],
-    //     attributeValIn: Pointer[_], attributeValOut: Pointer[Pointer[_]],
-    //     flag: Pointer[Int]): Int = {
-    //     flag.set(1)
-    //     attributeValOut.set(attributeValIn)
-    //     MPI_SUCCESS
-    //   }
-    // }
-
-    // val MPI_COMM_NULL_COPY_FN = Pointer.pointerToAddress(
-    //   0, classOf[MPI_Comm_copy_attr_function], noRelease)
-    // val MPI_COMM_NULL_DELETE_FN = Pointer.pointerToAddress(
-    //   0, classOf[MPI_Comm_delete_attr_function], noRelease)
-    // private lazy val commDupFn: MPI_Comm_copy_attr_function =
-    //   new MPI_Comm_copy_attr_function with DupAttrFunction[MPI_Comm]
-    // lazy val MPI_COMM_DUP_FN = Pointer.pointerTo(commDupFn)
-    // val MPI_WIN_NULL_COPY_FN = Pointer.pointerToAddress(
-    //   0, classOf[MPI_Win_copy_attr_function], noRelease)
-    // val MPI_WIN_NULL_DELETE_FN = Pointer.pointerToAddress(
-    //   0, classOf[MPI_Win_delete_attr_function], noRelease)
-    // private lazy val winDupFn: MPI_Win_copy_attr_function =
-    //   new MPI_Win_copy_attr_function with DupAttrFunction[MPI_Win]
-    // lazy val MPI_WIN_DUP_FN = Pointer.pointerTo(winDupFn)
-    // val MPI_TYPE_NULL_COPY_FN = Pointer.pointerToAddress(
-    //   0, classOf[MPI_Type_copy_attr_function], noRelease)
-    // val MPI_TYPE_NULL_DELETE_FN = Pointer.pointerToAddress(
-    //   0, classOf[MPI_Type_delete_attr_function], noRelease)
-    // private lazy val typeDupFn: MPI_Type_copy_attr_function =
-    //   new MPI_Type_copy_attr_function with DupAttrFunction[MPI_Datatype]
-    // lazy val MPI_TYPE_DUP_FN = Pointer.pointerTo(typeDupFn)
+    // lazy val MPI_COMM_NULL_COPY_FN =
+    //   getSymbolPointer("OMPI_C_MPI_COMM_NULL_COPY_FN").
+    //     as(classOf[MPI_Comm_copy_attr_function])
+    // lazy val MPI_COMM_NULL_DELETE_FN =
+    //   getSymbolPointer("OMPI_C_MPI_COMM_NULL_DELETE_FN").
+    //     as(classOf[MPI_Comm_delete_attr_function])
+    // lazy val MPI_COMM_DUP_FN =
+    //   getSymbolPointer("OMPI_C_MPI_COMM_DUP_FN").
+    //     as(classOf[MPI_Comm_copy_attr_function])
+    // lazy val MPI_WIN_NULL_COPY_FN =
+    //   getSymbolPointer("OMPI_C_MPI_WIN_NULL_COPY_FN").
+    //     as(classOf[MPI_Win_copy_attr_function])
+    // lazy val MPI_WIN_NULL_DELETE_FN =
+    //   getSymbolPointer("OMPI_C_MPI_WIN_NULL_DELETE_FN").
+    //     as(classOf[MPI_Win_delete_attr_function])
+    // lazy val MPI_WIN_DUP_FN =
+    //   getSymbolPointer("OMPI_C_MPI_WIN_DUP_FN").
+    //     as(classOf[MPI_Win_copy_attr_function])
+    // lazy val MPI_TYPE_NULL_COPY_FN =
+    //   getSymbolPointer("OMPI_C_MPI_TYPE_NULL_COPY_FN").
+    //     as(classOf[MPI_Type_copy_attr_function])
+    // lazy val MPI_TYPE_NULL_DELETE_FN =
+    //   getSymbolPointer("OMPI_C_MPI_TYPE_NULL_DELETE_FN").
+    //     as(classOf[MPI_Type_delete_attr_function])
+    // lazy val MPI_TYPE_DUP_FN =
+    //   getSymbolPointer("OMPI_C_MPI_TYPE_DUP_FN").
+    //     as(classOf[MPI_Type_copy_attr_function])
 
     // A.2.1 Point-to-Point Communication C Bindings
 
@@ -593,9 +676,10 @@ trait LibraryComponent
     @native def MPI_Reduce_scatter(sendbuf: Pointer[_], recvbuf: Pointer[_],
       recvcounts: Pointer[Int], datatype: MPI_Datatype, op: MPI_Op,
       comm: MPI_Comm): Int
-    @native def MPI_Reduce_scatter_block(sendbuf: Pointer[_],
+    def MPI_Reduce_scatter_block(sendbuf: Pointer[_],
       recvbuf: Pointer[_], recvcount: Int, datatype: MPI_Datatype, op: MPI_Op,
-      comm: MPI_Comm): Int
+      comm: MPI_Comm): Int =
+      ???
     @native def MPI_Scan(sendbuf: Pointer[_], recvbuf: Pointer[_], count: Int,
       datatype: MPI_Datatype, op: MPI_Op, comm: MPI_Comm): Int
     @native def MPI_Scatter(sendbuf: Pointer[_], sendcount: Int,
@@ -711,20 +795,24 @@ trait LibraryComponent
     @native def MPI_Cartdim_get(comm: MPI_Comm, ndims: Pointer[Int]): Int
     @native def MPI_Dims_create(nnodes: Int, ndims: Int,
       dims: Pointer[Int]): Int
-    @native def MPI_Dist_graph_create(comm_old: MPI_Comm, n: Int,
+    def MPI_Dist_graph_create(comm_old: MPI_Comm, n: Int,
       sources: Pointer[Int], degrees: Pointer[Int], destinations: Pointer[Int],
       weights: Pointer[Int], info: MPI_Info, reorder: Int,
-      comm_dist_graph: Pointer[MPI_Comm]): Int
-    @native def MPI_Dist_graph_create_adjacent(comm_old: MPI_Comm,
+      comm_dist_graph: Pointer[MPI_Comm]): Int =
+      ???
+    def MPI_Dist_graph_create_adjacent(comm_old: MPI_Comm,
       indegree: Int, sources: Pointer[Int], sourceweights: Pointer[Int],
       outdegree: Int, destinations: Pointer[Int], destweights: Pointer[Int],
-      info: MPI_Info, reorder: Int, comm_dist_graph: Pointer[MPI_Comm]): Int
-    @native def MPI_Dist_graph_neighbors(comm: MPI_Comm, maxindegree: Int,
+      info: MPI_Info, reorder: Int, comm_dist_graph: Pointer[MPI_Comm]): Int =
+      ???
+    def MPI_Dist_graph_neighbors(comm: MPI_Comm, maxindegree: Int,
       sources: Pointer[Int], sourceweights: Pointer[Int], maxoutdegree: Int,
-      destinations: Pointer[Int], destweights: Pointer[Int]): Int
-    @native def MPI_Dist_graph_neighbors_count(comm: MPI_Comm,
+      destinations: Pointer[Int], destweights: Pointer[Int]): Int =
+      ???
+    def MPI_Dist_graph_neighbors_count(comm: MPI_Comm,
       indegree: Pointer[Int], outdegree: Pointer[Int],
-      weighted: Pointer[Int]): Int
+      weighted: Pointer[Int]): Int =
+      ???
     @native def MPI_Graph_create(comm_old: MPI_Comm, nnodes: Int,
       index: Pointer[Int],
       edges: Pointer[Int], reorder: Int, comm_graph: Pointer[MPI_Comm]): Int

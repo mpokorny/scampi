@@ -8,15 +8,14 @@
 package org.truffulatree.scampi2
 
 class GroupSpec extends ScampiSpecification {
-  implicit def intToGroup(i: Int): mpi2.lib.MPI_Group =
-    i.asInstanceOf[mpi2.lib.MPI_Group]
-
   "Group" should {
     "have the proper handle attribute value" in {
-      mpi2.Group(42).handle must_== 42
+      val g = mpi2.Comm.self.dup.group
+      mpi2.Group(g.handle).handle must_== g.handle
     }
     "exhibit value equality" in {
-      mpi2.Group(10) must_== mpi2.Group(10)
+      val g = mpi2.Comm.self.dup.group
+      mpi2.Group(g.handle) must_== mpi2.Group(g.handle)
     }
     "have GroupEmpty correspond to MPI_GROUP_EMPTY" in {
       mpi2.GroupEmpty.handle must_== mpi2.lib.MPI_GROUP_EMPTY

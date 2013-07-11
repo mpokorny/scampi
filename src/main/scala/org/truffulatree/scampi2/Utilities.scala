@@ -19,6 +19,8 @@ protected[scampi2] trait Utilities {
     if (rc != mpi2.lib.MPI_SUCCESS) throw mkExc(rc)
   }
 
+  implicit def allocComm() = mpi2.allocateComm(1)
+
   implicit def allocGroup() = mpi2.allocateGroup(1)
 
   implicit def allocFile() = mpi2.allocateFile(1)
