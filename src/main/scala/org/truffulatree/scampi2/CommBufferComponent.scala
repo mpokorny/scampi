@@ -156,8 +156,11 @@ trait CommBufferComponent {
   }
 
   def getAddress(ptr: Pointer[_]): mpi2.lib.MPI_Aint =
-    withOutVar { address: Pointer[mpi2.lib.MPI_Aint] =>
-      mpi2.mpiCall(mpi2.lib.MPI_Get_address(ptr, address))
-      address(0)
+    if (ptr != null) {
+      withOutVar { address: Pointer[mpi2.lib.MPI_Aint] =>
+        mpi2.mpiCall(mpi2.lib.MPI_Get_address(ptr, address))
+        address(0)
+      }
     }
+    else 0
 }
