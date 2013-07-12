@@ -88,6 +88,10 @@ trait ScampiApp extends DelayedInit {
       try {
         for (proc <- initCode) proc()
       } catch {
+        case ni: NotImplementedError => {
+          println(s"NotImplementedError in test ${getClass.getSimpleName}")
+          result = false
+        }
         case e: Exception => {
           println(s"Uncaught exception in test ${getClass.getSimpleName}: ${e}")
           println(e.getStackTraceString)
