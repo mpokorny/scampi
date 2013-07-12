@@ -413,15 +413,15 @@ trait Mpi2LibraryComponent {
     def MPI_Datarep_extent_function(
       fn: DatareqExtentFunction[MPI_Datatype, MPI_Aint]): MPI_Datarep_extent_function
 
-    // val MPI_COMM_NULL_COPY_FN: Pointer[MPI_Comm_copy_attr_function]
-    // val MPI_COMM_NULL_DELETE_FN: Pointer[MPI_Comm_delete_attr_function]
-    // val MPI_COMM_DUP_FN: Pointer[MPI_Comm_copy_attr_function]
-    // val MPI_WIN_NULL_COPY_FN: Pointer[MPI_Win_copy_attr_function]
-    // val MPI_WIN_NULL_DELETE_FN: Pointer[MPI_Win_delete_attr_function]
-    // val MPI_WIN_DUP_FN: Pointer[MPI_Win_copy_attr_function]
-    // val MPI_TYPE_NULL_COPY_FN: Pointer[MPI_Type_copy_attr_function]
-    // val MPI_TYPE_NULL_DELETE_FN: Pointer[MPI_Type_delete_attr_function]
-    // val MPI_TYPE_DUP_FN: Pointer[MPI_Type_copy_attr_function]
+    val MPI_COMM_NULL_COPY_FN: Pointer[MPI_Comm_copy_attr_function]
+    val MPI_COMM_NULL_DELETE_FN: Pointer[MPI_Comm_delete_attr_function]
+    val MPI_COMM_DUP_FN: Pointer[MPI_Comm_copy_attr_function]
+    val MPI_WIN_NULL_COPY_FN: Pointer[MPI_Win_copy_attr_function]
+    val MPI_WIN_NULL_DELETE_FN: Pointer[MPI_Win_delete_attr_function]
+    val MPI_WIN_DUP_FN: Pointer[MPI_Win_copy_attr_function]
+    val MPI_TYPE_NULL_COPY_FN: Pointer[MPI_Type_copy_attr_function]
+    val MPI_TYPE_NULL_DELETE_FN: Pointer[MPI_Type_delete_attr_function]
+    val MPI_TYPE_DUP_FN: Pointer[MPI_Type_copy_attr_function]
 
     // A.2.1 Point-to-Point Communication C Bindings
 
