@@ -29,9 +29,6 @@ class ScampiSpec extends ScampiSpecification {
         mpi2.initThread(mpi2.ThreadLevel.Multiple)
       (mpi2.initialized && !mpi2.finalized) must_== true
     }
-    "support multiple threads" in {
-      mpi2.queryThread must_== mpi2.ThreadLevel.Multiple
-    }
     "complete isThreadMain" in {
       mpi2.isThreadMain must beOneOf(true, false)
     }
