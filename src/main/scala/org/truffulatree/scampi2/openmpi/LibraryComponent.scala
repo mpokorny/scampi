@@ -72,12 +72,8 @@ trait LibraryComponent
   final object lib extends Mpi2Library {
     BridJ.register()
 
-    private lazy val nativeLibrary = {
-      val result = BridJ.getNativeLibrary(this.getClass)
-      val file = BridJ.getNativeLibraryFile(BridJ.getNativeLibraryName(this.getClass))
-      println(s"${file}")
-      result
-    }
+    private lazy val nativeLibrary =
+      BridJ.getNativeLibrary(this.getClass)
 
     private def getSymbolPointer(name: String): Pointer[_] =
       nativeLibrary.getSymbolPointer(name)
@@ -289,7 +285,7 @@ trait LibraryComponent
     lazy val MPI_DATATYPE_NULL =
       new TypedPointers.MPI_Datatype(getSymbolPointer("ompi_mpi_datatype_null"))
     lazy val MPI_REQUEST_NULL =
-      new TypedPointers.MPI_Request(getSymbolPointer("ompi_mpi_request_null"))
+      new TypedPointers.MPI_Request(getSymbolPointer("ompi_request_null"))
     lazy val MPI_ERRHANDLER_NULL =
       new TypedPointers.MPI_Errhandler(getSymbolPointer("ompi_mpi_errhandler_null"))
 
@@ -302,7 +298,7 @@ trait LibraryComponent
     val MPI_KEYVAL_INVALID = -1
     val MPI_BSEND_OVERHEAD = 128
 
-    val MPI_BOTTOM = Pointer.pointerToAddress(0, 0, noRelease)
+    val MPI_BOTTOM = Pointer.pointerToAddress(0, classOf[Byte], noRelease)
     lazy val MPI_UNWEIGHTED = ???
 
     val MPI_PROC_NULL = -2
@@ -330,7 +326,7 @@ trait LibraryComponent
     val MPI_DISTRIBUTE_NONE = 2
     val MPI_DISTRIBUTE_DFLT_DARG = -1
 
-    val MPI_IN_PLACE = Pointer.pointerToAddress(1, 0, noRelease)
+    val MPI_IN_PLACE = Pointer.pointerToAddress(1, classOf[Byte], noRelease)
 
     val MPI_MODE_APPEND = 128
     val MPI_MODE_CREATE = 1

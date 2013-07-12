@@ -220,7 +220,7 @@ trait LibraryComponent
     val MPI_KEYVAL_INVALID = 0x24000000
     val MPI_BSEND_OVERHEAD = 88
 
-    val MPI_BOTTOM = Pointer.pointerToAddress(0, 0, noRelease)
+    val MPI_BOTTOM = Pointer.pointerToAddress(0, classOf[Byte], noRelease)
     val MPI_UNWEIGHTED = Pointer.pointerToAddress(0, classOf[Int], noRelease)
 
     val MPI_PROC_NULL = -1
@@ -245,7 +245,7 @@ trait LibraryComponent
     val MPI_DISTRIBUTE_NONE = 123
     val MPI_DISTRIBUTE_DFLT_DARG = -49767
 
-    val MPI_IN_PLACE = Pointer.pointerToAddress(-1, 0, noRelease)
+    val MPI_IN_PLACE = Pointer.pointerToAddress(-1, classOf[Byte], noRelease)
 
     val MPI_MODE_APPEND = 128
     val MPI_MODE_CREATE = 1
