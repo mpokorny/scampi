@@ -102,11 +102,6 @@ trait Enumerations {
     val UniqueOpen = Value(mpi2.lib.MPI_MODE_UNIQUE_OPEN)
     val Append = Value(mpi2.lib.MPI_MODE_APPEND)
     val Sequential = Value(mpi2.lib.MPI_MODE_SEQUENTIAL)
-    val NoCheck = Value(mpi2.lib.MPI_MODE_NOCHECK)
-    val NoPrecede = Value(mpi2.lib.MPI_MODE_NOPRECEDE)
-    val NoPut = Value(mpi2.lib.MPI_MODE_NOPUT)
-    val NoStore = Value(mpi2.lib.MPI_MODE_NOSTORE)
-    val NoSucceed = Value(mpi2.lib.MPI_MODE_NOSUCCEED)
     def amode(modes: Seq[FileMode]): Int = (0 /: modes)(_ | _.id)
   }
 
