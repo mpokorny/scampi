@@ -11,6 +11,7 @@ import scala.util.Random
 import scala.collection.mutable
 
 class Ch11Spec extends ScampiSpecification {
+  skipAllIf(libraryName == "openmpi")
   "ScaMPI" should {
     "pass example 11.1" in {
       runTest("Ex11_1", 4) must beTrue
@@ -86,6 +87,7 @@ object Ex11_1 extends ScampiApp {
       w.get((types(0)(p) * 1) @: a, Target(p, 0, 1, types(1)(p)))
     }
   }
+  win.free()
 
   // test the contents of 'a', which should be the same as 'map'
   result = a.equals(map)
@@ -101,19 +103,20 @@ object Ex11_2 extends ScampiApp {
   val b = MpiInt.alloc(m)
   for (i <- 0 until m) b(i) = m * Comm.world.rank + i
 
-  Comm.world.winCreate(
+  val win = Comm.world.winCreate(
     b.pointer,
     b.region.size,
     b.datatype.extent.range.toInt,
-    InfoNull).fenceFor() { win =>
+    InfoNull)
+
+  win.fenceFor() { w =>
     for (i <- 0 until m) {
       val j = map(i) / m
       val k = map(i) % m
-      win.get(
-        (MpiInt * 1) @: (a + i),
-        Target(j, k.toLong, 1, MpiInt))
+      w.get((MpiInt * 1) @: (a + i), Target(j, k.toLong, 1, MpiInt))
     }
   }
+  win.free()
 
   // test the contents of 'a', which should be the same as 'map'
   result = a.equals(map)
@@ -129,20 +132,23 @@ object Ex11_3 extends ScampiApp {
   val b = MpiInt.alloc(m)
   for (i <- 0 until m) a(i) = map(i)
 
-  Comm.world.winCreate(
+  val win = Comm.world.winCreate(
     b.pointer,
     b.region.size,
     b.datatype.extent.range.toInt,
-    InfoNull).fenceFor() { win =>
+    InfoNull)
+
+  win.fenceFor() { w =>
     for (i <- 0 until m) {
       val j = map(i) / m
       val k = map(i) % m
-      win.accumulate(
+      w.accumulate(
         (MpiInt * 1) @: (a + i),
         Target(j, k.toLong, 1, MpiInt),
         Op.sum)
     }
   }
+  win.free()
 
   // test the contents of 'b', which should be the sequence
   // {m * rank, ... m * rank + m - 1}

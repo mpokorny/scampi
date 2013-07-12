@@ -24,17 +24,41 @@ class Ch7Spec extends ScampiSpecification {
     "pass example 7.2" in {
       runTest("Ex7_2", 4) must beTrue
     }
-    "pass example 7.3a" in {
-      runTest("Ex7_3a", 4) must beTrue
+    if (libraryName != "openmpi") {
+      "pass example 7.3a" in {
+        runTest("Ex7_3a", 4) must beTrue
+      }
+    } else {
+      "pass example 7.3a" in {
+        skipped
+      }
     }
-    "pass example 7.3b" in {
-      runTest("Ex7_3b", 4) must beTrue
+    if (libraryName != "openmpi") {
+      "pass example 7.3b" in {
+        runTest("Ex7_3c", 4) must beTrue
+      }
+    } else {
+      "pass example 7.3b" in {
+        skipped
+      }
     }
-    "pass example 7.3c" in {
-      runTest("Ex7_3c", 4) must beTrue
+    if (libraryName != "openmpi") {
+      "pass example 7.3c" in {
+        runTest("Ex7_3c", 4) must beTrue
+      }
+    } else {
+      "pass example 7.3c" in {
+        skipped
+      }
     }
-    "pass example 7.4" in {
-      runTest("Ex7_4", 12) must beTrue
+    if (libraryName != "openmpi") {
+      "pass example 7.4" in {
+        runTest("Ex7_4", 12) must beTrue
+      }
+    } else {
+      "pass example 7.4" in {
+        skipped
+      }
     }
     "pass example 7.5" in {
       runTest("Ex7_5", 4) must beTrue
