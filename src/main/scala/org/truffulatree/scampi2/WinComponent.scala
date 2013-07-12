@@ -289,19 +289,26 @@ trait WinComponent {
   trait WinErrHandler extends mpi2.ErrHandler
 
   class WinUserErrHandler(fn: Function2[Win, Int, (Win, Int)])
-      extends mpi2.lib.MPI_Win_errhandler_function
-      with WinErrHandler
+      extends WinErrHandler
       with mpi2.UserErrHandler {
-    mpi2.mpiCall(
-      mpi2.lib.MPI_Win_create_errhandler(Pointer.pointerTo(this), handlePtr))
-
     // The error handler should only be called within the context of a
     // an mpiCall function.
-    def apply(win: Pointer[mpi2.lib.MPI_Win], err: Pointer[Int]) {
-      val result = fn(Win.lookup(win(0)).get, err(0))
-      win.set(result._1.handle)
-      err.set(result._2)
+    def handleError(win: Pointer[mpi2.lib.MPI_Win], err: Pointer[Int]) {
+      fn(Win.lookup(win(0)).get, err(0)) match {
+        case (newwin, code) => {
+          win(0) = newwin.handle
+          err(0) = code
+        }
+      }
     }
+
+    private val errhandlerFunction =
+      mpi2.lib.MPI_Win_errhandler_function(handleError)
+
+    mpi2.mpiCall(
+      mpi2.lib.MPI_Win_create_errhandler(
+        Pointer.pointerTo(errhandlerFunction),
+        handlePtr))
   }
 
   object WinErrHandler {

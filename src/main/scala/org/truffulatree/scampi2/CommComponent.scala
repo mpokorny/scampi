@@ -2264,19 +2264,26 @@ trait CommComponent {
   trait CommErrHandler extends mpi2.ErrHandler
 
   class CommUserErrHandler(fn: Function2[Comm, Int, (Comm, Int)])
-      extends mpi2.lib.MPI_Comm_errhandler_function
-      with CommErrHandler
+      extends CommErrHandler
       with mpi2.UserErrHandler {
-    mpi2.mpiCall(
-      mpi2.lib.MPI_Comm_create_errhandler(Pointer.pointerTo(this), handlePtr))
-
     // The error handler should only be called within the context of a
     // an mpiCall function.
-    def apply(comm: Pointer[mpi2.lib.MPI_Comm], err: Pointer[Int]) {
-      val result = fn(Comm(comm(0)), err(0))
-      comm.set(result._1.handle)
-      err.set(result._2)
+    private def handleError(comm: Pointer[mpi2.lib.MPI_Comm], err: Pointer[Int]) {
+      fn(Comm(comm(0)), err(0)) match {
+        case (newcomm, code) => {
+          comm(0) = newcomm.handle
+          err(0) = code
+        }
+      }
     }
+
+    private val errhandlerFunction =
+      mpi2.lib.MPI_Comm_errhandler_function(handleError)
+
+    mpi2.mpiCall(
+      mpi2.lib.MPI_Comm_create_errhandler(
+        Pointer.pointerTo(errhandlerFunction),
+        handlePtr))
   }
 
   object CommErrHandler {

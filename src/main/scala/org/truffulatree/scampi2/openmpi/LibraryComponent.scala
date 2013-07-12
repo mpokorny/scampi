@@ -450,33 +450,201 @@ trait LibraryComponent
     val MPI_ERR_WIN = 53
     val MPI_ERR_LASTCODE = 54
 
-    // lazy val MPI_COMM_NULL_COPY_FN =
-    //   getSymbolPointer("OMPI_C_MPI_COMM_NULL_COPY_FN").
-    //     as(classOf[MPI_Comm_copy_attr_function])
-    // lazy val MPI_COMM_NULL_DELETE_FN =
-    //   getSymbolPointer("OMPI_C_MPI_COMM_NULL_DELETE_FN").
-    //     as(classOf[MPI_Comm_delete_attr_function])
-    // lazy val MPI_COMM_DUP_FN =
-    //   getSymbolPointer("OMPI_C_MPI_COMM_DUP_FN").
-    //     as(classOf[MPI_Comm_copy_attr_function])
-    // lazy val MPI_WIN_NULL_COPY_FN =
-    //   getSymbolPointer("OMPI_C_MPI_WIN_NULL_COPY_FN").
-    //     as(classOf[MPI_Win_copy_attr_function])
-    // lazy val MPI_WIN_NULL_DELETE_FN =
-    //   getSymbolPointer("OMPI_C_MPI_WIN_NULL_DELETE_FN").
-    //     as(classOf[MPI_Win_delete_attr_function])
-    // lazy val MPI_WIN_DUP_FN =
-    //   getSymbolPointer("OMPI_C_MPI_WIN_DUP_FN").
-    //     as(classOf[MPI_Win_copy_attr_function])
-    // lazy val MPI_TYPE_NULL_COPY_FN =
-    //   getSymbolPointer("OMPI_C_MPI_TYPE_NULL_COPY_FN").
-    //     as(classOf[MPI_Type_copy_attr_function])
-    // lazy val MPI_TYPE_NULL_DELETE_FN =
-    //   getSymbolPointer("OMPI_C_MPI_TYPE_NULL_DELETE_FN").
-    //     as(classOf[MPI_Type_delete_attr_function])
-    // lazy val MPI_TYPE_DUP_FN =
-    //   getSymbolPointer("OMPI_C_MPI_TYPE_DUP_FN").
-    //     as(classOf[MPI_Type_copy_attr_function])
+    type MPI_Comm_copy_attr_function = Callbacks.MPI_Comm_copy_attr_function
+    def MPI_Comm_copy_attr_function(
+      fn: CopyAttrFunction[MPI_Comm]): MPI_Comm_copy_attr_function =
+      new Callbacks.MPI_Comm_copy_attr_function {
+        def apply(
+          t: MPI_Comm,
+          keyval: Int,
+          extraState: Pointer[_],
+          attributeValIn: Pointer[_],
+          attributeValOut: Pointer[Pointer[_]],
+          flag: Pointer[Integer]) =
+          fn(t, keyval, extraState, attributeValIn, attributeValOut, flag.as(classOf[Int]))
+      }
+
+    type MPI_Comm_delete_attr_function = Callbacks.MPI_Comm_delete_attr_function
+    def MPI_Comm_delete_attr_function(
+      fn: DeleteAttrFunction[MPI_Comm]): MPI_Comm_delete_attr_function =
+      new Callbacks.MPI_Comm_delete_attr_function {
+        def apply(
+          t: MPI_Comm,
+          keyval: Int,
+          attributeVal: Pointer[_],
+          extraState: Pointer[_]) =
+          fn(t, keyval, attributeVal, extraState)
+      }
+
+    type MPI_Win_copy_attr_function = Callbacks.MPI_Win_copy_attr_function
+    def MPI_Win_copy_attr_function(
+      fn: CopyAttrFunction[MPI_Win]): MPI_Win_copy_attr_function =
+      new Callbacks.MPI_Win_copy_attr_function {
+        def apply(
+          t: MPI_Win,
+          keyval: Int,
+          extraState: Pointer[_],
+          attributeValIn: Pointer[_],
+          attributeValOut: Pointer[Pointer[_]],
+          flag: Pointer[Integer]) =
+          fn(t, keyval, extraState, attributeValIn, attributeValOut, flag.as(classOf[Int]))
+      }
+
+    type MPI_Win_delete_attr_function = Callbacks.MPI_Win_delete_attr_function
+    def MPI_Win_delete_attr_function(
+      fn: DeleteAttrFunction[MPI_Win]): MPI_Win_delete_attr_function =
+      new Callbacks.MPI_Win_delete_attr_function {
+        def apply(
+          t: MPI_Win,
+          keyval: Int,
+          attributeVal: Pointer[_],
+          extraState: Pointer[_]) =
+          fn(t, keyval, attributeVal, extraState)
+      }
+
+    type MPI_Type_copy_attr_function = Callbacks.MPI_Type_copy_attr_function
+    def MPI_Type_copy_attr_function(
+      fn: CopyAttrFunction[MPI_Datatype]): MPI_Type_copy_attr_function =
+      new Callbacks.MPI_Type_copy_attr_function {
+        def apply(
+          t: MPI_Datatype,
+          keyval: Int,
+          extraState: Pointer[_],
+          attributeValIn: Pointer[_],
+          attributeValOut: Pointer[Pointer[_]],
+          flag: Pointer[Integer]) =
+          fn(t, keyval, extraState, attributeValIn, attributeValOut, flag.as(classOf[Int]))
+      }
+
+    type MPI_Type_delete_attr_function = Callbacks.MPI_Type_delete_attr_function
+    def MPI_Type_delete_attr_function(
+      fn: DeleteAttrFunction[MPI_Datatype]): MPI_Type_delete_attr_function =
+      new Callbacks.MPI_Type_delete_attr_function {
+        def apply(
+          t: MPI_Datatype,
+          keyval: Int,
+          attributeVal: Pointer[_],
+          extraState: Pointer[_]) =
+          fn(t, keyval, attributeVal, extraState)
+      }
+
+    type MPI_Comm_errhandler_function = Callbacks.MPI_Comm_errhandler_function
+    def MPI_Comm_errhandler_function(
+      fn: ErrhandlerFunction[MPI_Comm]): MPI_Comm_errhandler_function =
+      new Callbacks.MPI_Comm_errhandler_function {
+        def apply(t: Pointer[MPI_Comm], errcode: Pointer[Integer]) {
+          fn(t, errcode.as(classOf[Int]))
+        }
+      }
+
+    type MPI_Win_errhandler_function = Callbacks.MPI_Win_errhandler_function
+    def MPI_Win_errhandler_function(
+      fn: ErrhandlerFunction[MPI_Win]): MPI_Win_errhandler_function =
+      new Callbacks.MPI_Win_errhandler_function {
+        def apply(t: Pointer[MPI_Win], errcode: Pointer[Integer]) {
+          fn(t, errcode.as(classOf[Integer]))
+        }
+      }
+
+    type MPI_File_errhandler_function = Callbacks.MPI_File_errhandler_function
+    def MPI_File_errhandler_function(
+      fn: ErrhandlerFunction[MPI_File]): MPI_File_errhandler_function =
+      new Callbacks.MPI_File_errhandler_function {
+        def apply(t: Pointer[MPI_File], errcode: Pointer[Integer]) {
+          fn(t, errcode.as(classOf[Integer]))
+        }
+      }
+
+    type MPI_User_function = Callbacks.MPI_User_function
+    def MPI_User_function(fn: UserFunction[MPI_Datatype]): MPI_User_function =
+      new Callbacks.MPI_User_function {
+        def apply(
+          invec: Pointer[_],
+          inoutvec: Pointer[_],
+          len: Pointer[Integer],
+          datatype: Pointer[MPI_Datatype]) {
+          fn(invec, inoutvec, len.as(classOf[Int]), datatype)
+        }
+      }
+
+    type MPI_Grequest_cancel_function = Callbacks.MPI_Grequest_cancel_function
+    def MPI_Grequest_cancel_function(
+      fn: GrequestCancelFunction): MPI_Grequest_cancel_function =
+      new Callbacks.MPI_Grequest_cancel_function {
+        def apply(extraState: Pointer[_], complete: Int): Int =
+          fn(extraState, complete)
+      }
+
+    type MPI_Grequest_free_function = Callbacks.MPI_Grequest_free_function
+    def MPI_Grequest_free_function(
+      fn: GrequestFreeFunction): MPI_Grequest_free_function =
+      new Callbacks.MPI_Grequest_free_function {
+        def apply(extraState: Pointer[_]): Int =
+          fn(extraState)
+      }
+
+    type MPI_Grequest_query_function = Callbacks.MPI_Grequest_query_function
+    def MPI_Grequest_query_function(
+      fn: GrequestQueryFunction[MPI_Status]): MPI_Grequest_query_function =
+      new Callbacks.MPI_Grequest_query_function {
+        def apply(extraState: Pointer[_], status: Pointer[_]) =
+          fn(extraState, MpiStatus(status.as(classOf[MPI_Status])))
+      }
+
+    type MPI_Datarep_conversion_function = Callbacks.MPI_Datarep_conversion_function
+    def MPI_Datarep_conversion_function(
+      fn: DatareqConversionFunction[MPI_Datatype, MPI_Offset]):
+        MPI_Datarep_conversion_function =
+      new Callbacks.MPI_Datarep_conversion_function {
+        def apply(
+          userbuf: Pointer[_],
+          datatype: MPI_Datatype,
+          count: Int,
+          filebuf: Pointer[_],
+          position: MPI_Offset,
+          extraState: Pointer[_]): Int =
+          fn(userbuf, datatype, count, filebuf, position, extraState)
+      }
+
+    type MPI_Datarep_extent_function = Callbacks.MPI_Datarep_extent_function
+    def MPI_Datarep_extent_function(
+      fn: DatareqExtentFunction[MPI_Datatype, MPI_Aint]):
+        MPI_Datarep_extent_function =
+      new Callbacks.MPI_Datarep_extent_function {
+        def apply(
+          datatype: MPI_Datatype,
+          fileExtent: Pointer[MPI_Aint],
+          extraState: Pointer[_]): Int =
+          fn(datatype, fileExtent, extraState)
+      }
+
+    lazy val MPI_COMM_NULL_COPY_FN =
+      getSymbolPointer("OMPI_C_MPI_COMM_NULL_COPY_FN").
+        as(classOf[MPI_Comm_copy_attr_function])
+    lazy val MPI_COMM_NULL_DELETE_FN =
+      getSymbolPointer("OMPI_C_MPI_COMM_NULL_DELETE_FN").
+        as(classOf[MPI_Comm_delete_attr_function])
+    lazy val MPI_COMM_DUP_FN =
+      getSymbolPointer("OMPI_C_MPI_COMM_DUP_FN").
+        as(classOf[MPI_Comm_copy_attr_function])
+    lazy val MPI_WIN_NULL_COPY_FN =
+      getSymbolPointer("OMPI_C_MPI_WIN_NULL_COPY_FN").
+        as(classOf[MPI_Win_copy_attr_function])
+    lazy val MPI_WIN_NULL_DELETE_FN =
+      getSymbolPointer("OMPI_C_MPI_WIN_NULL_DELETE_FN").
+        as(classOf[MPI_Win_delete_attr_function])
+    lazy val MPI_WIN_DUP_FN =
+      getSymbolPointer("OMPI_C_MPI_WIN_DUP_FN").
+        as(classOf[MPI_Win_copy_attr_function])
+    lazy val MPI_TYPE_NULL_COPY_FN =
+      getSymbolPointer("OMPI_C_MPI_TYPE_NULL_COPY_FN").
+        as(classOf[MPI_Type_copy_attr_function])
+    lazy val MPI_TYPE_NULL_DELETE_FN =
+      getSymbolPointer("OMPI_C_MPI_TYPE_NULL_DELETE_FN").
+        as(classOf[MPI_Type_delete_attr_function])
+    lazy val MPI_TYPE_DUP_FN =
+      getSymbolPointer("OMPI_C_MPI_TYPE_DUP_FN").
+        as(classOf[MPI_Type_copy_attr_function])
 
     // A.2.1 Point-to-Point Communication C Bindings
 

@@ -75,6 +75,29 @@ trait Mpi2LibraryComponent {
     def release(p: Pointer[_]) {}
   }
 
+  type CopyAttrFunction[T] =
+    (T, Int, Pointer[_], Pointer[_], Pointer[Pointer[_]], Pointer[Int]) => Int
+
+  type DeleteAttrFunction[T] =
+    (T, Int, Pointer[_], Pointer[_]) => Int
+
+  type ErrhandlerFunction[T] =
+    (Pointer[T], Pointer[Int]) => Unit
+
+  type UserFunction[T] =
+    (Pointer[_], Pointer[_], Pointer[Int], Pointer[T]) => Unit
+
+  type GrequestCancelFunction = (Pointer[_], Int) => Int
+
+  type GrequestFreeFunction = Pointer[_] => Int
+
+  type GrequestQueryFunction[T] = (Pointer[_], T) => Int
+
+  type DatareqConversionFunction[D, O] =
+    (Pointer[_], D, Int, Pointer[_], O, Pointer[_]) => Int
+
+  type DatareqExtentFunction[D, A] = (D, Pointer[A], Pointer[_]) => Int
+
   trait Mpi2Library {
     // Types
     type MPI_Datatype
@@ -330,122 +353,65 @@ trait Mpi2LibraryComponent {
     val MPI_ERR_ASSERT: Int
     val MPI_ERR_LASTCODE: Int
 
-    abstract class MPI_Comm_copy_attr_function
-        extends Callback[MPI_Comm_copy_attr_function] {
-      def apply(
-        t: MPI_Comm,
-        keyval: Int,
-        extraState: Pointer[_],
-        attributeValIn: Pointer[_],
-        attributeValOut: Pointer[Pointer[_]],
-        flag: Pointer[Int]): Int
-    }
+    type MPI_Comm_copy_attr_function <: Callback[MPI_Comm_copy_attr_function]
+    def MPI_Comm_copy_attr_function(
+      fn: CopyAttrFunction[MPI_Comm]): MPI_Comm_copy_attr_function
 
-    abstract class MPI_Type_copy_attr_function
-        extends Callback[MPI_Type_copy_attr_function] {
-      def apply(
-        t: MPI_Datatype,
-        keyval: Int,
-        extraState: Pointer[_],
-        attributeValIn: Pointer[_],
-        attributeValOut: Pointer[Pointer[_]],
-        flag: Pointer[Int]): Int
-    }
+    type MPI_Type_copy_attr_function <: Callback[MPI_Type_copy_attr_function]
+    def MPI_Type_copy_attr_function(
+      fn: CopyAttrFunction[MPI_Datatype]): MPI_Type_copy_attr_function
 
-    abstract class MPI_Win_copy_attr_function
-        extends Callback[MPI_Win_copy_attr_function] {
-      def apply(
-        t: MPI_Win,
-        keyval: Int,
-        extraState: Pointer[_],
-        attributeValIn: Pointer[_],
-        attributeValOut: Pointer[Pointer[_]],
-        flag: Pointer[Int]): Int
-    }
+    type MPI_Win_copy_attr_function <: Callback[MPI_Win_copy_attr_function]
+    def MPI_Win_copy_attr_function(
+      fn: CopyAttrFunction[MPI_Win]): MPI_Win_copy_attr_function
 
-    abstract class MPI_Comm_delete_attr_function
-        extends Callback[MPI_Comm_delete_attr_function] {
-      def apply(
-        t: MPI_Comm,
-        keyval: Int,
-        attributeVal: Pointer[_],
-        extraState: Pointer[_]): Int
-    }
+    type MPI_Comm_delete_attr_function <: Callback[MPI_Comm_delete_attr_function]
+    def MPI_Comm_delete_attr_function(
+      fn: DeleteAttrFunction[MPI_Comm]): MPI_Comm_delete_attr_function
 
-    abstract class MPI_Type_delete_attr_function
-        extends Callback[MPI_Type_delete_attr_function] {
-      def apply(
-        t: MPI_Datatype,
-        keyval: Int,
-        attributeVal: Pointer[_],
-        extraState: Pointer[_]): Int
-    }
+    type MPI_Type_delete_attr_function <: Callback[MPI_Type_delete_attr_function]
+    def MPI_Type_delete_attr_function(
+      fn: DeleteAttrFunction[MPI_Datatype]): MPI_Type_delete_attr_function
 
-    abstract class MPI_Win_delete_attr_function
-        extends Callback[MPI_Win_delete_attr_function] {
-      def apply(
-        t: MPI_Win,
-        keyval: Int,
-        attributeVal: Pointer[_],
-        extraState: Pointer[_]): Int
-    }
+    type MPI_Win_delete_attr_function <: Callback[MPI_Win_delete_attr_function]
+    def MPI_Win_delete_attr_function(
+      fn: DeleteAttrFunction[MPI_Win]): MPI_Win_delete_attr_function
 
-    abstract class MPI_Comm_errhandler_function
-        extends Callback[MPI_Comm_errhandler_function] {
-      def apply(t: Pointer[MPI_Comm], errorcode: Pointer[Int]): Unit
-    }
+    type MPI_Comm_errhandler_function <: Callback[MPI_Comm_errhandler_function]
+    def MPI_Comm_errhandler_function(
+      fn: ErrhandlerFunction[MPI_Comm]): MPI_Comm_errhandler_function
 
-    abstract class MPI_Win_errhandler_function
-        extends Callback[MPI_Win_errhandler_function] {
-      def apply(t: Pointer[MPI_Win], errorcode: Pointer[Int]): Unit
-    }
+    type MPI_Win_errhandler_function <: Callback[MPI_Win_errhandler_function]
+    def MPI_Win_errhandler_function(
+      fn: ErrhandlerFunction[MPI_Win]): MPI_Win_errhandler_function
 
-    abstract class MPI_File_errhandler_function
-        extends Callback[MPI_File_errhandler_function] {
-      def apply(t: Pointer[MPI_File], errorcode: Pointer[Int]): Unit
-    }
+    type MPI_File_errhandler_function <: Callback[MPI_File_errhandler_function]
+    def MPI_File_errhandler_function(
+      fn: ErrhandlerFunction[MPI_File]): MPI_File_errhandler_function
 
-    abstract class MPI_User_function extends Callback[MPI_User_function] {
-      def apply(
-        invec: Pointer[_],
-        inoutvec: Pointer[_],
-        len: Pointer[Int],
-        datatype: Pointer[MPI_Datatype]): Unit
-    }
+    type MPI_User_function <: Callback[MPI_User_function]
+    def MPI_User_function(fn: UserFunction[MPI_Datatype]): MPI_User_function
 
-    abstract class MPI_Grequest_cancel_function
-        extends Callback[MPI_Grequest_cancel_function] {
-      def apply(extraState: Pointer[_], complete: Int): Int
-    }
+    type MPI_Grequest_cancel_function <: Callback[MPI_Grequest_cancel_function]
+    def MPI_Grequest_cancel_function(
+      fn: GrequestCancelFunction): MPI_Grequest_cancel_function
 
-    abstract class MPI_Grequest_free_function
-        extends Callback[MPI_Grequest_free_function] {
-      def apply(extraState: Pointer[_]): Int
-    }
+    type MPI_Grequest_free_function <: Callback[MPI_Grequest_free_function]
+    def MPI_Grequest_free_function(
+      fn: GrequestFreeFunction): MPI_Grequest_free_function
 
-    abstract class MPI_Grequest_query_function
-        extends Callback[MPI_Grequest_query_function] {
-      def apply(extraState: Pointer[_], status: Pointer[MPI_Status]): Int
-    }
+    type MPI_Grequest_query_function <: Callback[MPI_Grequest_query_function]
+    def MPI_Grequest_query_function(
+      fn: GrequestQueryFunction[MPI_Status]): MPI_Grequest_query_function
 
-    abstract class MPI_Datarep_conversion_function
-        extends Callback[MPI_Datarep_conversion_function] {
-      def apply(
-        userbuf: Pointer[_],
-        datatype: MPI_Datatype,
-        count: Int,
-        filebuf: Pointer[_],
-        position: MPI_Offset,
-        extraState: Pointer[_]): Int
-    }
+    type MPI_Datarep_conversion_function <: Callback[MPI_Datarep_conversion_function]
+    def MPI_Datarep_conversion_function(
+      fn: DatareqConversionFunction[MPI_Datatype, MPI_Offset]):
+        MPI_Datarep_conversion_function
 
-    abstract class MPI_Datarep_extent_function
-        extends Callback[MPI_Datarep_extent_function] {
-      def apply(
-        datatype: MPI_Datatype,
-        fileExtent: Pointer[MPI_Aint],
-        extraState: Pointer[_]): Int
-    }
+    type MPI_Datarep_extent_function <: Callback[MPI_Datarep_extent_function]
+    def MPI_Datarep_extent_function(
+      fn: DatareqExtentFunction[MPI_Datatype, MPI_Aint]): MPI_Datarep_extent_function
 
     // val MPI_COMM_NULL_COPY_FN: Pointer[MPI_Comm_copy_attr_function]
     // val MPI_COMM_NULL_DELETE_FN: Pointer[MPI_Comm_delete_attr_function]

@@ -769,19 +769,28 @@ trait FileComponent {
   // We use Option[File] arguments in FileUserErrHandler.fn so that
   // FileUserErrHandler may be a default error handler.
   class FileUserErrHandler(fn: Function2[Option[File], Int, (Option[File], Int)])
-      extends mpi2.lib.MPI_File_errhandler_function
-      with FileErrHandler
+      extends FileErrHandler
       with mpi2.UserErrHandler {
-    mpi2.mpiCall(
-      mpi2.lib.MPI_File_create_errhandler(Pointer.pointerTo(this), handlePtr))
-
     // The error handler should only be called within the context of a
     // an mpiCall function.
-    def apply(file: Pointer[mpi2.lib.MPI_File], err: Pointer[Int]) {
-      val result = fn(File.lookup(file(0)), err(0))
-      result._1.foreach(f => file.set(f.handle))
-      err.set(result._2)
+    def handleError(file: Pointer[mpi2.lib.MPI_File], err: Pointer[Int]) {
+      fn(File.lookup(file(0)), err(0)) match {
+        case (Some(newfile), code) => {
+          file(0) = newfile.handle
+          err(0) = code
+        }
+        case (None, code) =>
+          err(0) = code
+      }
     }
+
+    private val errhandlerFunction =
+      mpi2.lib.MPI_File_errhandler_function(handleError)
+
+    mpi2.mpiCall(
+      mpi2.lib.MPI_File_create_errhandler(
+        Pointer.pointerTo(errhandlerFunction),
+        handlePtr))
   }
 
   object FileErrHandler {

@@ -249,12 +249,35 @@ trait CacheComponent {
     type DeleteFunctionType = mpi2.lib.MPI_Comm_delete_attr_function
 
     protected def mkCopyFn(kv: Keyval[mpi2.Comm,_]): CopyFunctionType =
-      new mpi2.lib.MPI_Comm_copy_attr_function with CopyFn {
-        val keyval = kv
-      }
+      mpi2.lib.MPI_Comm_copy_attr_function((
+        handle: mpi2.lib.MPI_Comm,
+        key: Int,
+        extraState: Pointer[_],
+        attributeValIn: Pointer[_],
+        attributeValOut: Pointer[Pointer[_]],
+        flag: Pointer[Int]) => {
+        val attrValOutOpt =
+          kv.copyAttribute(fromMpiHandle(handle), attributeValIn)
+        if (attrValOutOpt.isDefined) {
+          val attrValOut = attrValOutOpt.get
+          attributeValOut.set(attrValOut)
+          attributes(key) = attrValOut
+          flag(0) = 1
+        } else {
+          flag(0) = 0
+        }
+        mpi2.lib.MPI_SUCCESS
+      })
 
-    protected object Del
-        extends mpi2.lib.MPI_Comm_delete_attr_function with DelFn
+    protected val Del: DeleteFunctionType =
+      mpi2.lib.MPI_Comm_delete_attr_function((
+        handle: mpi2.lib.MPI_Comm,
+        key: Int,
+        attributeVal: Pointer[_],
+        extraState: Pointer[_]) => {
+        attributes -= key
+        mpi2.lib.MPI_SUCCESS
+      })
 
     protected val cacheKeys = commCacheKeys
 
@@ -285,11 +308,35 @@ trait CacheComponent {
     type DeleteFunctionType = mpi2.lib.MPI_Win_delete_attr_function
 
     protected def mkCopyFn(kv: Keyval[mpi2.Win,_]): CopyFunctionType =
-      new mpi2.lib.MPI_Win_copy_attr_function with CopyFn {
-        val keyval = kv
-      }
+      mpi2.lib.MPI_Win_copy_attr_function((
+        handle: mpi2.lib.MPI_Win,
+        key: Int,
+        extraState: Pointer[_],
+        attributeValIn: Pointer[_],
+        attributeValOut: Pointer[Pointer[_]],
+        flag: Pointer[Int]) => {
+        val attrValOutOpt =
+          kv.copyAttribute(fromMpiHandle(handle), attributeValIn)
+        if (attrValOutOpt.isDefined) {
+          val attrValOut = attrValOutOpt.get
+          attributeValOut.set(attrValOut)
+          attributes(key) = attrValOut
+          flag(0) = 1
+        } else {
+          flag(0) = 0
+        }
+        mpi2.lib.MPI_SUCCESS
+      })
 
-    protected object Del extends mpi2.lib.MPI_Win_delete_attr_function with DelFn
+    protected val Del: DeleteFunctionType =
+      mpi2.lib.MPI_Win_delete_attr_function((
+        handle: mpi2.lib.MPI_Win,
+        key: Int,
+        attributeVal: Pointer[_],
+        extraState: Pointer[_]) => {
+        attributes -= key
+        mpi2.lib.MPI_SUCCESS
+      })
 
     protected val cacheKeys = winCacheKeys
 
@@ -318,11 +365,35 @@ trait CacheComponent {
     type DeleteFunctionType = mpi2.lib.MPI_Type_delete_attr_function
 
     protected def mkCopyFn(kv: Keyval[mpi2.Datatype[_],_]): CopyFunctionType =
-      new mpi2.lib.MPI_Type_copy_attr_function with CopyFn {
-        val keyval = kv
-      }
+      mpi2.lib.MPI_Type_copy_attr_function((
+        handle: mpi2.lib.MPI_Datatype,
+        key: Int,
+        extraState: Pointer[_],
+        attributeValIn: Pointer[_],
+        attributeValOut: Pointer[Pointer[_]],
+        flag: Pointer[Int]) => {
+        val attrValOutOpt =
+          kv.copyAttribute(fromMpiHandle(handle), attributeValIn)
+        if (attrValOutOpt.isDefined) {
+          val attrValOut = attrValOutOpt.get
+          attributeValOut.set(attrValOut)
+          attributes(key) = attrValOut
+          flag(0) = 1
+        } else {
+          flag(0) = 0
+        }
+        mpi2.lib.MPI_SUCCESS
+      })
 
-    protected object Del extends mpi2.lib.MPI_Type_delete_attr_function with DelFn
+    protected val Del: DeleteFunctionType =
+      mpi2.lib.MPI_Type_delete_attr_function((
+        handle: mpi2.lib.MPI_Datatype,
+        key: Int,
+        attributeVal: Pointer[_],
+        extraState: Pointer[_]) => {
+        attributes -= key
+        mpi2.lib.MPI_SUCCESS
+      })
 
     protected val cacheKeys = datatypeCacheKeys
 
