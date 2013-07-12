@@ -38,9 +38,6 @@ scalacOptions ++= Seq(
 
 compileOrder := CompileOrder.JavaThenScala
 
-initialCommands in console := """|val mpi2 = org.truffulatree.scampi2.mpi2;
-                                 |mpi2.init()""".stripMargin
-
 resourceGenerators in Test <+= (
   resourceManaged in Test,
   scalaHome in Test,
@@ -49,4 +46,4 @@ resourceGenerators in Test <+= (
     (dir, home, cd, cp) => testResources(dir, home, cd, cp)
   }
 
-testOptions in Test += Tests.Filter(_.endsWith("CacheSpec"))
+testOptions in Test += Tests.Filter(_.endsWith("Spec"))
