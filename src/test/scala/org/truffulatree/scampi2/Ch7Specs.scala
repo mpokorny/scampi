@@ -38,6 +38,7 @@ class Ch7Spec extends ScampiSpecification {
         runTest("Ex7_3c", 4) must beTrue
       }
     } else {
+      // OpenMPI doesn't define MPI_UNWEIGHTED
       "pass example 7.3b" in {
         skipped
       }
@@ -47,6 +48,7 @@ class Ch7Spec extends ScampiSpecification {
         runTest("Ex7_3c", 4) must beTrue
       }
     } else {
+      // OpenMPI doesn't define MPI_UNWEIGHTED
       "pass example 7.3c" in {
         skipped
       }
@@ -56,6 +58,7 @@ class Ch7Spec extends ScampiSpecification {
         runTest("Ex7_4", 12) must beTrue
       }
     } else {
+      // OpenMPI doesn't define MPI_UNWEIGHTED
       "pass example 7.4" in {
         skipped
       }

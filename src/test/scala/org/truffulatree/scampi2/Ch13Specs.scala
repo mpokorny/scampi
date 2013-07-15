@@ -10,6 +10,7 @@ package org.truffulatree.scampi2
 import java.io.{File => JFile}
 
 class Ch13Spec extends ScampiSpecification {
+  // All of these tests fail mysteriously with OpenMPI.
   skipAllIf(libraryName == "openmpi")
   "ScaMPI" should {
     "pass example 13.2" in {

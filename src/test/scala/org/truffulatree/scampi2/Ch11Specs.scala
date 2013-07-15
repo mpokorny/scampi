@@ -11,6 +11,7 @@ import scala.util.Random
 import scala.collection.mutable
 
 class Ch11Spec extends ScampiSpecification {
+  // All of these tests fail with OpenMPI with memory errors.
   skipAllIf(libraryName == "openmpi")
   "ScaMPI" should {
     "pass example 11.1" in {
