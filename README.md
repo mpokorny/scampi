@@ -11,17 +11,30 @@ ScaMPI may be built and installed using [sbt](http://www.scala-sbt.org/ "sbt") (
 Usage
 -----
 
-See the Scala files under the src/test directory for usage examples.
+See the Scala files under the src/test directory for usage examples. Many of the tests are derived form the examples in the MPI report; these tests are in files that are named according to the MPI report chapter in which the tests are found.
 
 Unit tests
 ----------
 
-Forcing multi-process unit tests (more or less required by MPI) into the sbt testing framework is not pretty. The current implementation nevertheless supports multi-process tests on a single host. The build.sbt file uses the scalaHome setting to ensure that spawned processes use a widely available scala executable (by "widely available", I mean a valid path on all test hosts, although the set of test hosts is currently limited to a single host); you may need to change this setting to point at your desired Scala installation to run the unit tests. NB: It seems that you must set scalaHome not just "in Test", and changing the setting doesn't always produce the expected results on the first test run, although the second test run is normally OK.
+Forcing multi-process unit tests (more or less required by MPI) into the sbt testing framework is not pretty. The current implementation nevertheless supports multi-process tests on a single host. The build.sbt file uses the scalaHome setting to ensure that spawned processes use a widely available scala executable (by "widely available", I mean a valid path on all test hosts, although the set of test hosts is currently limited to a single host); you may need to change this setting to point at your desired Scala installation to run the unit tests.
+
+The test suite can only be run by launching sbt with mpiexec. The simplest way to run tests using your preferred MPI library is as follows
+
+```
+SCAMPI2_LIBRARY_NAME=mpich mpiexec.hydra sbt -sbt-version 0.12.3 test
+```
+
+or
+
+```
+SCAMPI2_LIBRARY_NAME=openmpi mpiexec.openmpi sbt -sbt-version 0.12.3 test
+```
+
+Running tests with OpenMPI's mpiexec will generate a (harmless) error message from mpiexec because the sbt process itself doesn't call MPI_Init or MPI_Finalize.
 
 Future work
 -----------
 
-+ Add support for OpenMPI
 + Test with mvapich2
 + Add interface for MPI-3 API
 
