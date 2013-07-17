@@ -66,10 +66,6 @@ trait DerivedDatatypeComponent {
     newExtent: mpi2.Extent)
       extends DerivedDatatype[V] {
 
-    require(
-      newExtent.range % basisType.alignment == 0,
-      "Basis datatype alignment must divide resized datatype range")
-
     protected def dtCreate(dt: Pointer[mpi2.lib.MPI_Datatype]): Int =
       mpi2.lib.MPI_Type_create_resized(
         basisType.handle,
