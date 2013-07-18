@@ -11,7 +11,7 @@ import scala.language.implicitConversions
 import org.bridj.{Pointer, NativeObject, NativeObjectInterface, CLong, Callback}
 
 trait Mpi2LibraryComponent {
-  val lib: Mpi2Library
+  protected[scampi2] val lib: Mpi2Library
 
   val aintByteSize: Int
 

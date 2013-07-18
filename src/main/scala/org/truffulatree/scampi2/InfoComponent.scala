@@ -23,14 +23,18 @@ trait InfoComponent {
       result
     }
 
-    final def handle = handlePtr(0)
+    protected[scampi2] final def handle = handlePtr(0)
 
     override def finalize() {
       mpi2.lifecycleSync { if (!mpi2.finalized) free() }
       super.finalize()
     }
 
-    def free() { if (!isNull) mpi2.mpiCall(mpi2.lib.MPI_Info_free(handlePtr)) }
+    def free() {
+      if (!isNull) {
+        mpi2.mpiCall(mpi2.lib.MPI_Info_free(handlePtr))
+      }
+    }
 
     def +=(kv: (String, String)) = {
       withInString(kv._1) { key =>
@@ -109,7 +113,7 @@ trait InfoComponent {
 
     def dup: Info = withOutVar { newInfo: Pointer[mpi2.lib.MPI_Info] =>
       mpi2.mpiCall(mpi2.lib.MPI_Info_dup(handle, newInfo))
-      Info(newInfo(0))
+      Info.newInfo(newInfo(0))
     }
 
     def isNull: Boolean = handle != mpi2.lib.MPI_INFO_NULL
@@ -120,19 +124,17 @@ trait InfoComponent {
   }
 
   object Info {
-    def apply(): Info = withOutVar { newInfo: Pointer[mpi2.lib.MPI_Info] =>
-      mpi2.mpiCall(mpi2.lib.MPI_Info_create(newInfo))
-      Info(newInfo(0))
+    def apply(): Info = withOutVar { info: Pointer[mpi2.lib.MPI_Info] =>
+      mpi2.mpiCall(mpi2.lib.MPI_Info_create(info))
+      newInfo(info(0))
     }
 
-    def apply(info: mpi2.lib.MPI_Info): Info =
-      if (info != mpi2.lib.MPI_INFO_NULL) {
-        val result = new Info
-        result.handlePtr.set(info)
-        result
-      } else {
-        InfoNull
-      }
+    private def newInfo(info: mpi2.lib.MPI_Info): Info = {
+      require(info != mpi2.lib.MPI_INFO_NULL)
+      val result = new Info
+      result.handlePtr.set(info)
+      result
+    }
 
     def apply(kvs: (String, String)*): Info = {
       val result = empty

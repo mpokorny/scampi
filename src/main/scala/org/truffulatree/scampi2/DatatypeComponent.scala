@@ -8,6 +8,7 @@
 package org.truffulatree.scampi2
 
 import scala.collection.mutable
+import scala.ref.WeakReference
 import org.bridj.Pointer
 
 trait DatatypeComponent {
@@ -25,23 +26,26 @@ trait DatatypeComponent {
       result
     }
 
-    def handle = handlePtr(0)
+    protected[scampi2] def handle = handlePtr(0)
 
-    final def fromMpiHandle(h: mpi2.lib.MPI_Datatype): Datatype[V] =
+    protected[scampi2] final def fromMpiHandle(h: mpi2.lib.MPI_Datatype):
+        Datatype[V] =
       Datatype.lookup(h).asInstanceOf[Datatype[V]]
 
-    final def mpiSetAttr(keyval: Int, attribute: Pointer[_]) {
+    protected[scampi2] final def mpiSetAttr(
+      keyval: Int,
+      attribute: Pointer[_]) {
       mpi2.mpiCall(mpi2.lib.MPI_Type_set_attr(handle, keyval, attribute))
     }
 
-    final def mpiGetAttr(
+    protected[scampi2] final def mpiGetAttr(
         keyval: Int,
         attribute: Pointer[Pointer[_]],
         flag: Pointer[Int]) {
       mpi2.mpiCall(mpi2.lib.MPI_Type_get_attr(handle, keyval, attribute, flag))
     }
 
-    final def mpiDeleteAttr(keyval: Int) {
+    protected[scampi2] final def mpiDeleteAttr(keyval: Int) {
       mpi2.mpiCall(mpi2.lib.MPI_Type_delete_attr(handle, keyval))
     }
 
@@ -106,7 +110,8 @@ trait DatatypeComponent {
 
     def apply(vs: V*): SeqValueBuffer[V] = SeqValueBuffer(vs:_*)(this)
 
-    def alloc(length: Int): SeqValueBuffer[V] = SeqValueBuffer.alloc(length)(this)
+    def alloc(length: Int): SeqValueBuffer[V] =
+      SeqValueBuffer.alloc(length)(this)
 
     def offsetTo(idx: Int): Long
 
@@ -115,19 +120,25 @@ trait DatatypeComponent {
   }
 
   object Datatype {
-    private val dts: mutable.Map[mpi2.lib.MPI_Datatype, Datatype[_]] =
+    private val dts:
+        mutable.Map[mpi2.lib.MPI_Datatype, WeakReference[Datatype[_]]] =
       mutable.Map.empty
 
-    def register(dt: Datatype[_]) {
+    protected[scampi2] def register(dt: Datatype[_]) {
       dts.synchronized {
-        dts(dt.handle) = dt
+        dts(dt.handle) = WeakReference(dt)
       }
     }
 
-    def lookup(dt: mpi2.lib.MPI_Datatype): Datatype[_] = dts.synchronized {
-      if (dts.contains(dt)) dts(dt)
-      else newDatatype(dt)
-    }
+    protected[scampi2] def lookup(dt: mpi2.lib.MPI_Datatype): Datatype[_] =
+      dts.synchronized {
+        if (dts.contains(dt)) {
+          dts(dt) match {
+            case WeakReference(datatype) if !datatype.isNull => datatype
+            case _ => newDatatype(dt)
+          }
+        } else newDatatype(dt)
+      }
 
     protected[scampi2] def remove(dt: Datatype[_]) {
       dts.synchronized {
@@ -212,33 +223,45 @@ trait DatatypeComponent {
                    |as a derived datatype""".stripMargin)
             }
             case mpi2.DupCombiner(mpiBasisType) => {
-              val basisType = lookup(mpiBasisType).asInstanceOf[mpi2.SeqDatatype[_]]
+              val basisType =
+                lookup(mpiBasisType).asInstanceOf[mpi2.SeqDatatype[_]]
               new mpi2.DupDatatype(basisType)
             }
             case mpi2.ContiguousCombiner(mpiBasisType, count) => {
-              val basisType = lookup(mpiBasisType).asInstanceOf[mpi2.SeqDatatype[_]]
+              val basisType =
+                lookup(mpiBasisType).asInstanceOf[mpi2.SeqDatatype[_]]
               new mpi2.ContiguousDatatype(basisType, count)
             }
             case mpi2.VectorCombiner(mpiBasisType, count, blocklength, stride) => {
-              val basisType = lookup(mpiBasisType).asInstanceOf[mpi2.SeqDatatype[_]]
+              val basisType =
+                lookup(mpiBasisType).asInstanceOf[mpi2.SeqDatatype[_]]
               new mpi2.VectorDatatype(basisType, count, blocklength, stride)
             }
             case mpi2.HvectorCombiner(mpiBasisType, count, blocklength, stride) => {
-              val basisType = lookup(mpiBasisType).asInstanceOf[mpi2.SeqDatatype[_]]
+              val basisType =
+                lookup(mpiBasisType).asInstanceOf[mpi2.SeqDatatype[_]]
               new mpi2.HvectorDatatype(basisType, count, blocklength, stride)
             }
             case mpi2.IndexedCombiner(mpiBasisType, blocks) => {
-              val basisType = lookup(mpiBasisType).asInstanceOf[mpi2.SeqDatatype[_]]
+              val basisType =
+                lookup(mpiBasisType).asInstanceOf[mpi2.SeqDatatype[_]]
               new mpi2.IndexedDatatype(basisType, blocks)
             }
             case mpi2.HindexedCombiner(mpiBasisType, blocks) => {
-              val basisType = lookup(mpiBasisType).asInstanceOf[mpi2.SeqDatatype[_]]
+              val basisType =
+                lookup(mpiBasisType).asInstanceOf[mpi2.SeqDatatype[_]]
               new mpi2.HindexedDatatype(basisType, blocks)
             }
-            case mpi2.IndexedBlockCombiner(mpiBasisType, blocklength,
+            case mpi2.IndexedBlockCombiner(
+              mpiBasisType,
+              blocklength,
               displacements) => {
-              val basisType = lookup(mpiBasisType).asInstanceOf[mpi2.SeqDatatype[_]]
-              new mpi2.IndexedBlockDatatype(basisType, blocklength, displacements)
+              val basisType =
+                lookup(mpiBasisType).asInstanceOf[mpi2.SeqDatatype[_]]
+              new mpi2.IndexedBlockDatatype(
+                basisType,
+                blocklength,
+                displacements)
             }
             case mpi2.StructCombiner(blocks) =>
               new mpi2.StructDatatype(
@@ -249,13 +272,15 @@ trait DatatypeComponent {
                     Some(tb.displacement))
                 }):_*)
             case mpi2.SubarrayCombiner(mpiBasisType, dims, order) => {
-              val basisType = lookup(mpiBasisType).asInstanceOf[mpi2.SeqDatatype[_]]
+              val basisType =
+                lookup(mpiBasisType).asInstanceOf[mpi2.SeqDatatype[_]]
               new mpi2.SubarrayDatatype(basisType, dims, order)
             }
             case d: DarrayCombiner =>
               ???
             case mpi2.ResizedCombiner(mpiBasisType, extent) => {
-              val basisType = lookup(mpiBasisType).asInstanceOf[mpi2.SeqDatatype[_]]
+              val basisType =
+                lookup(mpiBasisType).asInstanceOf[mpi2.SeqDatatype[_]]
               new mpi2.ResizedDatatype(basisType, extent)
             }
           }

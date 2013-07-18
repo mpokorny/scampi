@@ -138,7 +138,7 @@ trait CacheComponent {
 
     val attributes = mutable.Map[Int, Pointer[_]]()
 
-    def fromMpiHandle(h: HandleType): ObjectType
+    protected[scampi2] def fromMpiHandle(h: HandleType): ObjectType
 
     trait CopyFn {
       val keyval: Keyval[ObjectType,_]

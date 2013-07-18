@@ -2154,12 +2154,18 @@ trait CommComponent {
   }
 
   object Comm {
-    private val comms: mutable.Map[mpi2.lib.MPI_Comm, Comm] =
+    private val comms: mutable.Map[mpi2.lib.MPI_Comm, WeakReference[Comm]] =
       mutable.Map.empty
 
     def apply(comm: mpi2.lib.MPI_Comm): Comm = comms.synchronized {
-      if (comms.contains(comm)) comms(comm)
-      else {
+      val optComm =
+        if (comms.contains(comm)) {
+          comms(comm) match {
+            case WeakReference(c) if !c.isNull => Some(c)
+            case _ => None
+          }
+        } else None
+      optComm.getOrElse(
         if (comm != mpi2.lib.MPI_COMM_NULL) {
           withOutVar { flag: Pointer[Int] =>
             mpiCall(mpi2.lib.MPI_Comm_test_inter(comm, flag))
@@ -2179,13 +2185,13 @@ trait CommComponent {
               }
             result.handlePtr(0) = comm
             result.errHandler = CommErrHandler.Return
-            comms(comm) = result
+            comms(comm) = WeakReference(result)
             result
           }
         } else {
           throw new mpi2.Exception("Null communicator cannot be instantiated")
         }
-      }
+      )
     }
 
     protected[scampi2] def remove(comm: Comm) {

@@ -35,7 +35,7 @@ trait FileComponent {
       result
     }
 
-    final def handle = handlePtr(0)
+    protected[scampi2] final def handle = handlePtr(0)
 
     mpi2.mpiCall(
       mpi2.lib.MPI_File_open(
@@ -725,13 +725,13 @@ trait FileComponent {
   }
 
   object File {
-    private val files: mutable.Map[mpi2.lib.MPI_File, File] =
+    private val files: mutable.Map[mpi2.lib.MPI_File, WeakReference[File]] =
       mutable.Map.empty
 
     def register(file: File) {
       files.synchronized {
         require(!file.isNull, "Registered file may have a null handle")
-        files(file.handle) = file
+        files(file.handle) = WeakReference(file)
       }
     }
 
@@ -740,7 +740,12 @@ trait FileComponent {
     }
 
     def lookup(file: mpi2.lib.MPI_File): Option[File] = files.synchronized {
-      files.get(file)
+      if (files.contains(file)) {
+        files(file) match {
+          case WeakReference(f) if !f.isNull => Some(f)
+          case _ => None
+        }
+      } else None
     }
 
     def delete(filePath: JFile, info: Info = mpi2.InfoNull) {

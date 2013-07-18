@@ -7,6 +7,7 @@
 //
 package org.truffulatree.scampi2
 
+import scala.collection.mutable
 import org.bridj.Pointer
 
 trait GroupComponent {
@@ -19,7 +20,7 @@ trait GroupComponent {
       result
     }
 
-    final def handle = handlePtr(0)
+    protected[scampi2] final def handle = handlePtr(0)
 
     override def equals(other: Any): Boolean = {
       other.isInstanceOf[Group] &&
@@ -32,7 +33,11 @@ trait GroupComponent {
       super.finalize()
     }
 
-    def free() { if (!isNull) mpi2.mpiCall(mpi2.lib.MPI_Group_free(handlePtr)) }
+    def free() {
+      if (!isNull) {
+        mpi2.mpiCall(mpi2.lib.MPI_Group_free(handlePtr))
+      }
+    }
 
     final lazy val size: Int = withOutVar { size: Pointer[Int] =>
       mpi2.mpiCall(mpi2.lib.MPI_Group_size(handle, size))
@@ -174,12 +179,13 @@ trait GroupComponent {
   }
 
   object Group {
-    def apply(group: mpi2.lib.MPI_Group): Group =
-      if (group == GroupEmpty.handle) GroupEmpty
-      else if (group != mpi2.lib.MPI_GROUP_NULL) {
+    protected[scampi2] def apply(grp: mpi2.lib.MPI_Group): Group = {
+      if (grp == GroupEmpty.handle) GroupEmpty
+      else if (grp != mpi2.lib.MPI_GROUP_NULL) {
         val result = new Group
-        result.handlePtr.set(group)
+        result.handlePtr.set(grp)
         result
       } else throw new mpi2.Exception("Null group cannot be instantiated")
+    }
   }
 }

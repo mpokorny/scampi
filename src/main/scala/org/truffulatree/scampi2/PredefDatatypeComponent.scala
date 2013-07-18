@@ -18,7 +18,7 @@ trait PredefDatatypeComponent {
     handlePtr.set(dt)
     mpi2.Datatype.register(this)
 
-    override lazy val handle = super.handle
+    override protected[scampi2] lazy val handle = super.handle
 
     val multiplicity = 1
 

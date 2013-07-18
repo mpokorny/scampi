@@ -37,7 +37,7 @@ trait WinComponent {
       result
     }
 
-    final def handle = handlePtr(0)
+    protected[scampi2] final def handle = handlePtr(0)
 
     protected val selfException = mpi2.WinException.curried(this)
 
@@ -74,7 +74,8 @@ trait WinComponent {
       }
     }
 
-    def fromMpiHandle(h: mpi2.lib.MPI_Win): Win = Win.lookup(h).get
+    protected[scampi2] def fromMpiHandle(h: mpi2.lib.MPI_Win): Win =
+      Win.lookup(h).get
 
     def mpiSetAttr(keyval: Int, attribute: Pointer[_]) {
       mpiCall(mpi2.lib.MPI_Win_set_attr(handle, keyval, attribute))
@@ -254,13 +255,13 @@ trait WinComponent {
   }
 
   object Win {
-    private val wins: mutable.Map[mpi2.lib.MPI_Win, Win] =
+    private val wins: mutable.Map[mpi2.lib.MPI_Win, WeakReference[Win]] =
       mutable.Map.empty
 
     protected[scampi2] def register(win: Win) {
       wins.synchronized {
         require(!win.isNull, "May not register a null Win")
-        wins(win.handle) = win
+        wins(win.handle) = WeakReference(win)
       }
     }
 
@@ -268,9 +269,15 @@ trait WinComponent {
       wins.synchronized { wins -= win.handle }
     }
 
-    def lookup(win: mpi2.lib.MPI_Win): Option[Win] = wins.synchronized {
-      wins.get(win)
-    }
+    protected[scampi2] def lookup(win: mpi2.lib.MPI_Win): Option[Win] =
+      wins.synchronized {
+        if (wins.contains(win)) {
+          wins(win) match {
+            case WeakReference(w) if !w.isNull => Some(w)
+            case _ => None
+          }
+        } else None
+      }
 
     object PredefWinIntKeyval
         extends mpi2.RestrictedAttributeKeyval[mpi2.Win,Int]
