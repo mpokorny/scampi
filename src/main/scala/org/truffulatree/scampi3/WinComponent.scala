@@ -62,11 +62,6 @@ trait WinComponent {
 
     override def hashCode: Int = handle.##
 
-    override def finalize() {
-      mpi3.lifecycleSync { if (!mpi3.finalized) free() }
-      super.finalize()
-    }
-
     def free() {
       if (!isNull) {
         Win.remove(this)

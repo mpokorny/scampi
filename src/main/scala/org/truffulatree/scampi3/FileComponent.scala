@@ -61,11 +61,6 @@ trait FileComponent {
 
     protected def mpiCall(c: => Int) = mpi3.mpiCall(c, selfException)
 
-    override def finalize() {
-      mpi3.lifecycleSync { if (!mpi3.finalized) close() }
-      super.finalize()
-    }
-
     final def close() {
       if (!isNull) {
         File.remove(this)
