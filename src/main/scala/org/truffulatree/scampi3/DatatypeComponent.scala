@@ -20,6 +20,8 @@ trait DatatypeComponent {
 
     type Elem = V
 
+    implicit def allocateCount() = mpi3.allocateCount(1)
+
     final protected val handlePtr: Pointer[mpi3.lib.MPI_Datatype] = {
       val result = allocateDatatype()
       result.set(mpi3.lib.MPI_DATATYPE_NULL)
@@ -77,23 +79,23 @@ trait DatatypeComponent {
     val alignment: Int
 
     final lazy val extent: mpi3.Extent = {
-      val args = mpi3.allocateAint(2)
+      val args = mpi3.allocateCount(2)
       try {
-        mpi3.mpiCall(mpi3.lib.MPI_Type_get_extent(handle, args, args.next))
+        mpi3.mpiCall(mpi3.lib.MPI_Type_get_extent_x(handle, args, args.next))
         mpi3.Extent(lowerBound=args(0), range=args(1))
       } finally args.release()
     }
 
     final lazy val trueExtent: mpi3.Extent = {
-      val args = mpi3.allocateAint(2)
+      val args = mpi3.allocateCount(2)
       try {
-        mpi3.mpiCall(mpi3.lib.MPI_Type_get_true_extent(handle, args, args.next))
+        mpi3.mpiCall(mpi3.lib.MPI_Type_get_true_extent_x(handle, args, args.next))
         mpi3.Extent(lowerBound=args(0), range=args(1))
       } finally args.release()
     }
 
-    final lazy val size: Int = withOutVar { result: Pointer[Int] =>
-      mpi3.mpiCall(mpi3.lib.MPI_Type_size(handle, result))
+    final lazy val size: Long = withOutVar { result: Pointer[mpi3.lib.MPI_Count] =>
+      mpi3.mpiCall(mpi3.lib.MPI_Type_size_x(handle, result))
       result(0)
     }
 
@@ -262,6 +264,17 @@ trait DatatypeComponent {
                 basisType,
                 blocklength,
                 displacements)
+            }
+            case mpi3.HindexedBlockCombiner(
+              mpiBasisType,
+              blocklength,
+              displacements) => {
+              val basisType =
+                lookup(mpiBasisType).asInstanceOf[mpi3.SeqDatatype[_]]
+              new mpi3.HindexedBlockDatatype(
+                basisType,
+                blocklength,
+                displacements.map(aintToLong(_)))
             }
             case mpi3.StructCombiner(blocks) =>
               new mpi3.StructDatatype(

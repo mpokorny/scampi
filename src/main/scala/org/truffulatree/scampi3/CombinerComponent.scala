@@ -56,7 +56,7 @@ trait CombinerComponent {
   case class HindexedBlockCombiner(
     datatype: mpi3.lib.MPI_Datatype,
     blocklength: Int,
-    displacements: Seq[MPI_Aint])
+    displacements: Seq[mpi3.lib.MPI_Aint])
       extends Combiner
 
   case class StructCombiner(blocks: Seq[mpi3.TypeBlock]) extends Combiner

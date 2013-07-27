@@ -532,7 +532,63 @@ trait DerivedDatatypeComponent {
     val blocklength: Int,
     val displacements: Seq[Long])
       extends DerivedDatatype[V] {
-    FIXME
+
+    require(displacements.length >= 0, "Number of blocks must be at least one")
+
+    require(blocklength >= 0, "Block length must be non-negative")
+
+    protected def dtCreate(dt: Pointer[mpi3.lib.MPI_Datatype]): Int = {
+      val dspls =
+        if (displacements.length > 0) {
+          val aints = allocateAint(displacements.length)
+          for (i <- 0 until displacements.length) aints(i) = displacements(i)
+          aints
+        }
+        else
+          nullPointer[mpi3.lib.MPI_Aint]
+      try {
+        mpi3.lib.MPI_Type_create_hindexed_block(
+          displacements.length,
+          blocklength,
+          dspls,
+          basisType.handle,
+          dt)
+      } finally {
+        if (dspls != Pointer.NULL) dspls.release()
+      }
+    }
+
+    val multiplicity = blocklength * basisType.multiplicity
+
+    val alignment = basisType.alignment
+
+    private val blockMultiplicity = blocklength * basisType.multiplicity
+
+    protected def resolveIndex(idx: Int) =
+      (idx / blockMultiplicity, idx % blockMultiplicity)
+
+    protected def blockPointer(p: Pointer[_], blk: Int): Pointer[_] = {
+      val displacement = displacements(blk)
+      if (p != Pointer.NULL)
+        p.offset(displacement)
+      else
+        Pointer.pointerToAddress(displacement, classOf[Byte], mpi3.noRelease)
+    }
+
+    def load(p: Pointer[_], idx: Int): V = {
+      val (blk, off) = resolveIndex(idx)
+      basisType.load(blockPointer(p, blk), off)
+    }
+
+    def store(p: Pointer[_], idx: Int, elem: V) {
+      val (blk, off) = resolveIndex(idx)
+      basisType.store(blockPointer(p, blk), off, elem)
+    }
+
+    def offsetTo(idx: Int): Long = {
+      val (blk, off) = resolveIndex(idx)
+      displacements(idx) + basisType.offsetTo(off)
+    }
   }
 
   //

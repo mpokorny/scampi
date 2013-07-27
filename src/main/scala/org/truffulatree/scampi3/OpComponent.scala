@@ -31,6 +31,11 @@ trait OpComponent {
       super.finalize()
     }
 
+    lazy val isCommutative: Boolean =
+      withOutVar { commute: Pointer[Int] =>
+        mpi3.mpiCall(mpi3.lib.MPI_Op_commutative(handle, commute))
+        commute(0) != 0
+      }
   }
 
   object Op {

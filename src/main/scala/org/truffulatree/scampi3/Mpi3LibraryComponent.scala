@@ -45,11 +45,13 @@ trait Mpi3LibraryComponent {
 
   def allocateOffset(n: Int = 1): Pointer[lib.MPI_Offset]
 
+  def allocateCount(n: Int = 1): Pointer[lib.MPI_Count]
+
   // def associateStatus(peer: Pointer[lib.MPI_Status]): lib.MPI_Status
 
-  def pointerToAint(v: mpi3.lib.MPI_Aint): Pointer[mpi3.lib.MPI_Aint]
+  def pointerToAint(v: lib.MPI_Aint): Pointer[lib.MPI_Aint]
 
-  def aintFromPointer(v: Pointer[_]): mpi3.lib.MPI_Aint
+  def aintFromPointer(v: Pointer[_]): lib.MPI_Aint
 
   def newStatus(n: Int = 1): Seq[lib.MPI_Status]
 
@@ -69,6 +71,10 @@ trait Mpi3LibraryComponent {
 
   protected def _offsetFromLong(long: Long): lib.MPI_Offset
 
+  protected def _countToLong(offset: lib.MPI_Count): Long
+
+  protected def _countFromLong(long: Long): lib.MPI_Count
+
   implicit def aintToLong(aint: lib.MPI_Aint): Long = _aintToLong(aint)
 
   implicit def aintFromLong(long: Long): lib.MPI_Aint = _aintFromLong(long)
@@ -76,6 +82,10 @@ trait Mpi3LibraryComponent {
   implicit def offsetToLong(offset: lib.MPI_Offset): Long = _offsetToLong(offset)
 
   implicit def offsetFromLong(long: Long): lib.MPI_Offset = _offsetFromLong(long)
+
+  implicit def countToLong(offset: lib.MPI_Count): Long = _countToLong(offset)
+
+  implicit def countFromLong(long: Long): lib.MPI_Count = _countFromLong(long)
 
   protected val noRelease = new Pointer.Releaser {
     def release(p: Pointer[_]) {}
@@ -166,6 +176,7 @@ trait Mpi3LibraryComponent {
     val MPI_C_LONG_DOUBLE_COMPLEX: MPI_Datatype
     val MPI_AINT: MPI_Datatype
     val MPI_OFFSET: MPI_Datatype
+    val MPI_COUNT: MPI_Datatype
 
     val MPI_COMM_WORLD: MPI_Comm
     val MPI_COMM_SELF: MPI_Comm
@@ -191,6 +202,7 @@ trait Mpi3LibraryComponent {
     val MPI_MINLOC: MPI_Op
     val MPI_MAXLOC: MPI_Op
     val MPI_REPLACE: MPI_Op
+    val MPI_NO_OP: MPI_Op
 
     val MPI_TAG_UB: Int
     val MPI_HOST: Int
@@ -247,8 +259,8 @@ trait Mpi3LibraryComponent {
     val MPI_ERRORS_ARE_FATAL: MPI_Errhandler
     val MPI_ERRORS_RETURN: MPI_Errhandler
 
-    val MPI_VERSION: Int = 2
-    val MPI_SUBVERSION: Int = 2
+    val MPI_VERSION: Int = 3
+    val MPI_SUBVERSION: Int = 0
 
     val MPI_INFO_NULL: MPI_Info
     val MPI_INFO_ENV: MPI_Info
@@ -651,7 +663,7 @@ trait Mpi3LibraryComponent {
     def MPI_Iallgatherv(sendbuf: Pointer[_], sendcount: Int,
       sendtype: MPI_Datatype, recvbuf: Pointer[_], recvcounts: Pointer[Int],
       displs: Pointer[Int], recvtype: MPI_Datatype, comm: MPI_Comm,
-      request: Poitner[MPI_Request]): Int
+      request: Pointer[MPI_Request]): Int
     def MPI_Iallreduce(sendbuf: Pointer[_], recvbuf: Pointer[_], count: Int,
       datatype: MPI_Datatype, op: MPI_Op, comm: MPI_Comm,
       request: Pointer[MPI_Request]): Int
@@ -684,7 +696,7 @@ trait Mpi3LibraryComponent {
       datatype: MPI_Datatype, op: MPI_Op, root: Int, comm: MPI_Comm,
       request: Pointer[MPI_Request]): Int
     def MPI_Ireduce_scatter(sendbuf: Pointer[_], recvbuf: Pointer[_],
-      recvcounts: Pointer[Int], datatype: MPI_Datatype, op: MPI_Op op,
+      recvcounts: Pointer[Int], datatype: MPI_Datatype, op: MPI_Op,
       comm: MPI_Comm, request: Pointer[MPI_Request]): Int
     def MPI_Ireduce_scatter_block(sendbuf: Pointer[_], recvbuf: Pointer[_],
       recvcount: Int, datatype: MPI_Datatype, op: MPI_Op, comm: MPI_Comm,
@@ -741,7 +753,7 @@ trait Mpi3LibraryComponent {
     def MPI_Comm_free_keyval(comm_keyval: Pointer[Int]): Int
     def MPI_Comm_get_attr(comm: MPI_Comm, comm_keyval: Int,
       attribute_val: Pointer[Pointer[_]], flag: Pointer[Int]): Int
-    def MPI_Comm_get_info(comm: MPI_Comm comm, info_used: Pointer[MPI_Info]): Int
+    def MPI_Comm_get_info(comm: MPI_Comm, info_used: Pointer[MPI_Info]): Int
     def MPI_Comm_get_name(comm: MPI_Comm, comm_name: Pointer[Byte],
       resultlen: Pointer[Int]): Int
     def MPI_Comm_group(comm: MPI_Comm, group: Pointer[MPI_Group]): Int
@@ -808,12 +820,10 @@ trait Mpi3LibraryComponent {
     def MPI_Win_free_keyval(win_keyval: Pointer[Int]): Int
     def MPI_Win_get_attr(win: MPI_Win, win_keyval: Int,
       attribute_val: Pointer[Pointer[_]], flag: Pointer[Int]): Int
-    def MPI_Win_get_info(win: MPI_Win, info_used: Pointer[MPI_Info]): Int
     def MPI_Win_get_name(win: MPI_Win, win_name: Pointer[Byte],
       resultlen: Pointer[Int]): Int
     def MPI_Win_set_attr(win: MPI_Win, win_keyval: Int,
       attribute_val: Pointer[_]): Int
-    def MPI_Win_set_info(win: MPI_Win, info: MPI_Info): Int
     def MPI_Win_set_name(win: MPI_Win, win_name: Pointer[Byte]): Int
 
     // A.2.5 Process Topologies C Bindings
@@ -1011,7 +1021,7 @@ trait Mpi3LibraryComponent {
       origin_datatype: MPI_Datatype, target_rank: Int, target_disp: MPI_Aint,
       target_count: Int, target_datatype: MPI_Datatype, op: MPI_Op, win: MPI_Win,
       request: Pointer[MPI_Request]): Int
-    def MPI_Rget(origin_addr: Pointer, origin_count: Int,
+    def MPI_Rget(origin_addr: Pointer[_], origin_count: Int,
       origin_datatype: MPI_Datatype, target_rank: Int, target_disp: MPI_Aint,
       target_count: Int, target_datatype: MPI_Datatype, win: MPI_Win,
       request: Pointer[MPI_Request]): Int
@@ -1024,9 +1034,9 @@ trait Mpi3LibraryComponent {
       origin_datatype: MPI_Datatype, target_rank: Int, target_disp: MPI_Aint,
       target_count: Int, target_datatype: MPI_Datatype, win: MPI_Win,
       request: Pointer[MPI_Request]): Int
-    def MPI_Win_allocate(size: MPI_Aint, disp_unit: Int, info:  MPI_Info,
+    def MPI_Win_allocate(size: MPI_Aint, disp_unit: Int, info: MPI_Info,
       comm: MPI_Comm, baseptr: Pointer[_], win: Pointer[MPI_Win]): Int
-    def MPI_Win_allocate_shared(size: MPI_Aint, disp_unit: Int, info:  MPI_Info,
+    def MPI_Win_allocate_shared(size: MPI_Aint, disp_unit: Int, info: MPI_Info,
       comm: MPI_Comm, baseptr: Pointer[_], win: Pointer[MPI_Win]): Int
     def MPI_Win_attach(win: MPI_Win, base: Pointer[_], size: MPI_Aint): Int
     def MPI_Win_complete(win: MPI_Win): Int

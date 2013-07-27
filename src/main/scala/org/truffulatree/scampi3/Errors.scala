@@ -71,4 +71,10 @@ trait Errors {
 
   val structBlockLengthErrorMsg =
     "StructBlock length must be non-negative"
+
+  val numBlocksUnequalToInDegreeErrorMsg =
+    "Number of blocks not equal to graph node indegree"
+
+  val numBlocksUnequalToOutDegreeErrorMsg =
+    "Number of blocks not equal to graph node outdegree"
 }

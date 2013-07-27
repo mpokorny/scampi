@@ -13,6 +13,8 @@ trait StatusComponent {
   mpi3: Scampi3 with Mpi3LibraryComponent =>
 
   class Status protected[scampi3] (libStatus: mpi3.lib.MPI_Status) {
+    implicit def allocateCount() = mpi3.allocateCount(1)
+
     def source: Int = libStatus.MPI_SOURCE
 
     def source_=(x: Int) { libStatus.MPI_SOURCE = x }
@@ -46,16 +48,17 @@ trait StatusComponent {
         if (x) 1 else 0)
     }
 
-    def getElements(datatype: mpi3.Datatype[_]): Int =
-      withOutVar { result: Pointer[Int] =>
-        mpi3.lib.MPI_Get_elements(
-          Pointer.pointerTo(libStatus), datatype.handle,
+    def getElements(datatype: mpi3.Datatype[_]): Long =
+      withOutVar { result: Pointer[mpi3.lib.MPI_Count] =>
+        mpi3.lib.MPI_Get_elements_x(
+          Pointer.pointerTo(libStatus),
+          datatype.handle,
           result)
         result(0)
       }
 
-    def setElements(datatype: mpi3.Datatype[_], x: Int) {
-      mpi3.lib.MPI_Status_set_elements(
+    def setElements(datatype: mpi3.Datatype[_], x: Long) {
+      mpi3.lib.MPI_Status_set_elements_x(
         Pointer.pointerTo(libStatus),
         datatype.handle,
         x)

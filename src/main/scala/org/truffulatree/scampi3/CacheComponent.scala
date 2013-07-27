@@ -63,10 +63,9 @@ trait CacheComponent {
   }
 
   trait KeyvalAint {
-    def toPointer(v: Long): Pointer[_] = mpi3.pointerToAint(mpi3.aintFromLong(v))
+    def toPointer(v: Long): Pointer[_] = mpi3.pointerToAint(v)
 
-    def fromPointer(ptr: Pointer[_]): Long =
-      mpi3.aintToLong(mpi3.aintFromPointer(ptr))
+    def fromPointer(ptr: Pointer[_]): Long = mpi3.aintFromPointer(ptr)
   }
 
   trait KeyvalPointer {

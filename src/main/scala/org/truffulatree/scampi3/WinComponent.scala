@@ -15,23 +15,28 @@ import org.bridj.Pointer
 trait WinComponent {
   mpi3: Scampi3 with Mpi3LibraryComponent =>
 
+  def allocMem(size: Long, info: Info): Pointer[_] =
+    withOutVar { pptr: Pointer[Pointer[_]] =>
+      mpiCall(mpi3.lib.MPI_Alloc_mem(size, info.handle, pptr))
+      pptr(0)
+    }
+
+  def freeMem(base: Pointer[_]) {
+    mpiCall(mpi3.lib.MPI_Free_mem(base))
+  }
+
   case class Target(
     rank: Int,
-    displacement: mpi3.lib.MPI_Aint,
+    displacement: Long,
     count: Int,
     datatype: mpi3.Datatype[_])
 
-  final class Win(
-    base: Pointer[_],
-    size: Long,
-    dispUnit: Int,
-    info: mpi3.Info,
-    comm: mpi3.IntraComm)
+  sealed abstract class Win
       extends mpi3.Named
       with mpi3.WinCache
       with mpi3.WithErrHandler {
 
-    private val handlePtr: Pointer[mpi3.lib.MPI_Win] = {
+    protected[scampi3] val handlePtr: Pointer[mpi3.lib.MPI_Win] = {
       val result = allocateWin()
       result.set(mpi3.lib.MPI_WIN_NULL)
       result
@@ -42,18 +47,6 @@ trait WinComponent {
     protected val selfException = mpi3.WinException.curried(this)
 
     protected def mpiCall(c: => Int) = mpi3.mpiCall(c, selfException)
-
-    mpi3.mpiCall(
-      mpi3.lib.MPI_Win_create(
-        base,
-        size,
-        dispUnit,
-        info.handle,
-        comm.handle,
-        handlePtr),
-      CommException.curried(comm))
-
-    Win.register(this)
 
     override def equals(other: Any): Boolean = {
       other.isInstanceOf[Win] &&
@@ -105,8 +98,7 @@ trait WinComponent {
           target.displacement,
           target.count,
           target.datatype.handle,
-          handle
-        ))
+          handle))
     }
 
     def get(origin: mpi3.ValueBuffer[_], target: Target) {
@@ -134,6 +126,156 @@ trait WinComponent {
           target.datatype.handle,
           op.handle,
           handle))
+    }
+
+    def compareAndSwap(
+      origin: mpi3.ValueBuffer[_],
+      compare: mpi3.ValueBuffer[_],
+      result: mpi3.ValueBuffer[_],
+      target: Target) {
+      require(
+        origin.valueCount > 0,
+        "Origin buffer element count must be positive")
+      require(
+        compare.valueCount > 0,
+        "Compare buffer element count must be positive")
+      require(
+        result.valueCount > 0,
+        "Result buffer element count must be positive")
+      require(
+        target.count > 0,
+        "Target element count must be positive")
+      mpiCall(
+        mpi3.lib.MPI_Compare_and_swap(
+          origin.pointer,
+          compare.pointer,
+          result.pointer,
+          target.datatype.handle,
+          target.rank,
+          target.displacement,
+          handle))
+    }
+
+    def fetchAndOp(
+      origin: mpi3.ValueBuffer[_],
+      result: mpi3.ValueBuffer[_],
+      target: Target,
+      op: mpi3.Op) {
+      require(
+        origin.valueCount > 0,
+        "Origin buffer element count must be positive")
+      require(
+        result.valueCount > 0,
+        "Result buffer element count must be positive")
+      require(
+        target.count > 0,
+        "Target element count must be positive")
+      mpiCall(
+        mpi3.lib.MPI_Fetch_and_op(
+          origin.pointer,
+          result.pointer,
+          target.datatype.handle,
+          target.rank,
+          target.displacement,
+          op.handle,
+          handle))
+    }
+
+    def getAccumulate(
+      origin: mpi3.ValueBuffer[_],
+      result: mpi3.ValueBuffer[_],
+      target: Target,
+      op: mpi3.Op) {
+      mpiCall(
+        mpi3.lib.MPI_Get_accumulate(
+          origin.pointer,
+          origin.valueCount,
+          origin.datatype.handle,
+          result.pointer,
+          result.valueCount,
+          result.datatype.handle,
+          target.rank,
+          target.displacement,
+          target.count,
+          target.datatype.handle,
+          op.handle,
+          handle))
+    }
+
+    def raccumulate(
+      origin: mpi3.ValueBuffer[_],
+      target: Target,
+      op: mpi3.Op): mpi3.Request = {
+      val result = new mpi3.Request
+      mpiCall(
+        mpi3.lib.MPI_Raccumulate(
+          origin.pointer,
+          origin.valueCount,
+          origin.datatype.handle,
+          target.rank,
+          target.displacement,
+          target.count,
+          target.datatype.handle,
+          op.handle,
+          handle,
+          result.handlePtr))
+      result
+    }
+
+    def rget(origin: mpi3.ValueBuffer[_], target: Target): mpi3.Request = {
+      val result = new mpi3.Request
+      mpiCall(
+        mpi3.lib.MPI_Rget(
+          origin.pointer,
+          origin.valueCount,
+          origin.datatype.handle,
+          target.rank,
+          target.displacement,
+          target.count,
+          target.datatype.handle,
+          handle,
+          result.handlePtr))
+      result
+    }
+
+    def rgetAccumulate(
+      origin: mpi3.ValueBuffer[_],
+      result: mpi3.ValueBuffer[_],
+      target: Target,
+      op: mpi3.Op): mpi3.Request = {
+      val req = new mpi3.Request
+      mpiCall(
+        mpi3.lib.MPI_Rget_accumulate(
+          origin.pointer,
+          origin.valueCount,
+          origin.datatype.handle,
+          result.pointer,
+          result.valueCount,
+          result.datatype.handle,
+          target.rank,
+          target.displacement,
+          target.count,
+          target.datatype.handle,
+          op.handle,
+          handle,
+          req.handlePtr))
+      req
+    }
+
+    def rput(origin: mpi3.ValueBuffer[_], target: Target): mpi3.Request = {
+      val result = new mpi3.Request
+      mpiCall(
+        mpi3.lib.MPI_Rput(
+          origin.pointer,
+          origin.valueCount,
+          origin.datatype.handle,
+          target.rank,
+          target.displacement,
+          target.count,
+          target.datatype.handle,
+          handle,
+          result.handlePtr))
+      result
     }
 
     def fence(assert: Seq[mpi3.WinMode.WinMode]=List.empty) {
@@ -175,6 +317,34 @@ trait WinComponent {
     }
 
     def unlock(rank: Int) { mpiCall(mpi3.lib.MPI_Win_unlock(rank, handle)) }
+
+    def lockAll(assert: Seq[mpi3.WinMode.WinMode]=List.empty) {
+      mpiCall(mpi3.lib.MPI_Win_lock_all(mpi3.WinMode.assert(assert), handle))
+    }
+
+    def unlockAll() {
+      mpiCall(mpi3.lib.MPI_Win_unlock_all(handle))
+    }
+
+    def flush(rank: Int) {
+      mpiCall(mpi3.lib.MPI_Win_flush(rank, handle))
+    }
+
+    def flushAll() {
+      mpiCall(mpi3.lib.MPI_Win_flush_all(handle))
+    }
+
+    def flushLocal(rank: Int) {
+      mpiCall(mpi3.lib.MPI_Win_flush_local(rank, handle))
+    }
+
+    def flushLocalAll() {
+      mpiCall(mpi3.lib.MPI_Win_flush_local_all(handle))
+    }
+
+    def sync() {
+      mpiCall(mpi3.lib.MPI_Win_sync(handle))
+    }
 
     private def fencedEval[A](
         assertOpen: Seq[mpi3.WinMode.WinMode],
@@ -229,6 +399,16 @@ trait WinComponent {
         assert: Seq[mpi3.WinMode.WinMode]=List.empty): (Win => A) => A =
       lockEval(lockType, rank, assert, _)
 
+    private def lockAllEval[A](
+      assert: Seq[mpi3.WinMode.WinMode], f: Win => A): A = {
+      lockAll(assert)
+      try f(this) finally unlockAll()
+    }
+
+    def lockAllFor[A](
+      assert: Seq[mpi3.WinMode.WinMode]=List.empty): (Win => A) => A =
+      lockAllEval(assert, _)
+
     protected def setName(s: Pointer[Byte]) {
       mpiCall(mpi3.lib.MPI_Win_set_name(handle, s))
     }
@@ -239,6 +419,16 @@ trait WinComponent {
       }
     }
 
+    def info: mpi3.Info = {
+      val result = new mpi3.Info()
+      mpiCall(mpi3.lib.MPI_Win_get_info(handle, result.handlePtr))
+      result
+    }
+
+    def info_=(newInfo: mpi3.Info) {
+      mpiCall(mpi3.lib.MPI_Win_set_info(handle, newInfo.handle))
+    }
+
     type ErrHandlerType = WinErrHandler
 
     protected var currentErrHandler: WinErrHandler = WinErrHandler.Return
@@ -247,6 +437,52 @@ trait WinComponent {
 
     protected def mpiSetErrhandler(errhandler: mpi3.lib.MPI_Errhandler): Int =
       mpi3.lib.MPI_Win_set_errhandler(handle, errhandler)
+  }
+
+  final class WinCreate protected[scampi3] (val base: Pointer[_])
+      extends Win
+
+  final class WinAllocate protected[scampi3] () extends Win {
+    protected[scampi3] val basePtr: Pointer[Pointer[_]] =
+      Pointer.allocatePointer()
+
+    def base: Pointer[_] = basePtr(0)
+  }
+
+  final class WinShared protected[scampi3] () extends Win {
+    protected[scampi3] val basePtr: Pointer[Pointer[_]] =
+      Pointer.allocatePointer()
+
+    def base: Pointer[_] = basePtr(0)
+
+    def query(rank: Int): (Long, Int, Pointer[_]) =
+      withOutVar { size: Pointer[mpi3.lib.MPI_Aint] =>
+        withOutVar { dispUnit: Pointer[Int] =>
+          withOutVar { baseptr: Pointer[Pointer[_]] =>
+            mpiCall(
+              mpi3.lib.MPI_Win_shared_query(handle,
+                rank,
+                size,
+                dispUnit,
+                baseptr))
+            (size(0), dispUnit(0), baseptr(0))
+          }
+        }
+      }
+  }
+
+  final class WinDynamic protected[scampi3] () extends Win {
+    private val attached: mutable.Set[Pointer[_]] = mutable.Set()
+
+    def attach(base: Pointer[_], size: Long) {
+      mpiCall(mpi3.lib.MPI_Win_attach(handle, base, size))
+      attached += base
+    }
+
+    def detach(base: Pointer[_]) {
+      attached -= base
+      mpiCall(mpi3.lib.MPI_Win_detach(handle, base))
+    }
   }
 
   object Win {

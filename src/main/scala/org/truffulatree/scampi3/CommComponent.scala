@@ -38,7 +38,7 @@ trait CommComponent {
     }
   }
 
-  sealed class Comm protected ()
+  sealed abstract class Comm protected ()
       extends mpi3.Named
       with mpi3.CommCache
       with mpi3.WithErrHandler {
@@ -64,9 +64,9 @@ trait CommComponent {
     }
 
     final def mpiGetAttr(
-        keyval: Int,
-        attribute: Pointer[Pointer[_]],
-        flag: Pointer[Int]) {
+      keyval: Int,
+      attribute: Pointer[Pointer[_]],
+      flag: Pointer[Int]) {
       mpiCall(mpi3.lib.MPI_Comm_get_attr(handle, keyval, attribute, flag))
     }
 
@@ -119,6 +119,19 @@ trait CommComponent {
       Comm(comm(0))
     }
 
+    def dupWithInfo(info: Info): Comm =
+      withOutVar { comm: Pointer[mpi3.lib.MPI_Comm] =>
+        mpiCall(mpi3.lib.MPI_Comm_dup_with_info(handle, info.handle, comm))
+        Comm(comm(0))
+      }
+
+    def idup: (mpi3.Request, () => Comm) = {
+      val comm = allocateComm()
+      val req = new mpi3.Request
+      mpiCall(mpi3.lib.MPI_Comm_idup(handle, comm, req.handlePtr))
+      (req, () => Comm(comm(0)))
+    }
+
     def create(group: mpi3.Group): Option[Comm] =
       withOutVar { newComm: Pointer[mpi3.lib.MPI_Comm] =>
         mpiCall(mpi3.lib.MPI_Comm_create(handle, group.handle, newComm))
@@ -135,6 +148,12 @@ trait CommComponent {
       }
 
     def barrier() { mpiCall(mpi3.lib.MPI_Barrier(handle)) }
+
+    def ibarrier(): mpi3.Request = {
+      val result = new mpi3.Request
+      mpiCall(mpi3.lib.MPI_Ibarrier(handle, result.handlePtr))
+      result
+    }
 
     def send(buff: mpi3.ValueBuffer[_], dest: Int, tag: Int) {
       mpiCall(
@@ -366,7 +385,7 @@ trait CommComponent {
       }
     }
 
-    def doImprobe(source: Int, tag: Int): Option[mpi3.Message] = {
+    def improbeNoStatus(source: Int, tag: Int): Option[mpi3.Message] = {
       val message = new mpi3.Message
       withOutVar { flag: Pointer[Int] =>
         mpiCall(
@@ -377,12 +396,12 @@ trait CommComponent {
             flag,
             message.handlePtr,
             mpi3.lib.MPI_STATUS_IGNORE))
-        if (flag(0) != 0) Some((new mpi3.Status(status(0)), message))
+        if (flag(0) != 0) Some(message)
         else None
       }
     }
 
-    def mprobe(source: Int, tag: Int): Option[(mpi3.Message, mpi3.Status)] = {
+    def mprobe(source: Int, tag: Int): (mpi3.Message, mpi3.Status) = {
       val status = mpi3.newStatus()
       val message = new mpi3.Message
       mpiCall(
@@ -392,21 +411,19 @@ trait CommComponent {
           handle,
           message.handlePtr,
           Pointer.pointerTo(status(0))))
-      if (flag(0) != 0) Some((message, new mpi3.Status(status(0))))
-      else None
+      (message, new mpi3.Status(status(0)))
     }
 
-    def doMprobe(source: Int, tag: Int): Option[mpi3.Message] = {
+    def mprobeNoStatus(source: Int, tag: Int): mpi3.Message = {
       val message = new mpi3.Message
       mpiCall(
-        mpi3.lib.MPI_Improbe(
+        mpi3.lib.MPI_Mprobe(
           source,
           tag,
           handle,
           message.handlePtr,
           mpi3.lib.MPI_STATUS_IGNORE))
-      if (flag(0) != 0) Some((new mpi3.Status(status(0)), message))
-      else None
+      message
     }
 
     def sendInit(buff: mpi3.ValueBuffer[_], dest: Int, tag: Int):
@@ -485,12 +502,12 @@ trait CommComponent {
     }
 
     def sendrecv(
-        sendBuff: mpi3.ValueBuffer[_],
-        dest: Int,
-        sendTag: Int,
-        recvBuff: mpi3.ValueBuffer[_],
-        source: Int,
-        recvTag: Int): mpi3.Status = {
+      sendBuff: mpi3.ValueBuffer[_],
+      dest: Int,
+      sendTag: Int,
+      recvBuff: mpi3.ValueBuffer[_],
+      source: Int,
+      recvTag: Int): mpi3.Status = {
       val status = mpi3.newStatus()
       mpiCall(
         mpi3.lib.MPI_Sendrecv(
@@ -510,12 +527,12 @@ trait CommComponent {
     }
 
     def doSendrecv(
-        sendBuff: mpi3.ValueBuffer[_],
-        dest: Int,
-        sendTag: Int,
-        recvBuff: mpi3.ValueBuffer[_],
-        source: Int,
-        recvTag: Int) {
+      sendBuff: mpi3.ValueBuffer[_],
+      dest: Int,
+      sendTag: Int,
+      recvBuff: mpi3.ValueBuffer[_],
+      source: Int,
+      recvTag: Int) {
       mpiCall(
         mpi3.lib.MPI_Sendrecv(
           sendBuff.pointer,
@@ -533,11 +550,11 @@ trait CommComponent {
     }
 
     def sendrecvReplace(
-        buff: mpi3.ValueBuffer[_],
-        dest: Int,
-        sendTag: Int,
-        source: Int,
-        recvTag: Int): mpi3.Status = {
+      buff: mpi3.ValueBuffer[_],
+      dest: Int,
+      sendTag: Int,
+      source: Int,
+      recvTag: Int): mpi3.Status = {
       val status = mpi3.newStatus()
       mpiCall(
         mpi3.lib.MPI_Sendrecv_replace(
@@ -553,11 +570,11 @@ trait CommComponent {
       new mpi3.Status(status(0))
     }
     def doSendrecvReplace(
-        buff: mpi3.ValueBuffer[_],
-        dest: Int,
-        sendTag: Int,
-        source: Int,
-        recvTag: Int) {
+      buff: mpi3.ValueBuffer[_],
+      dest: Int,
+      sendTag: Int,
+      source: Int,
+      recvTag: Int) {
       mpiCall(
         mpi3.lib.MPI_Sendrecv_replace(
           buff.pointer,
@@ -573,9 +590,9 @@ trait CommComponent {
 
     // allgather()
     protected def allgather(
-        sendBuff: mpi3.ValueBuffer[_],
-        recvBuff: mpi3.ValueBuffer[_],
-        recvCount: Int) {
+      sendBuff: mpi3.ValueBuffer[_],
+      recvBuff: mpi3.ValueBuffer[_],
+      recvCount: Int) {
       mpiCall(
         mpi3.lib.MPI_Allgather(
           sendBuff.pointer,
@@ -587,11 +604,34 @@ trait CommComponent {
           handle))
     }
 
-    private def getBlockPars(
-        bufflen: Int,
-        blocks: Seq[mpi3.Block],
-        counts: Pointer[Int],
-        displs: Pointer[Int]) {
+    def allgather(sendBuff: mpi3.ValueBuffer[_], recvBuff: mpi3.ValueBuffer[_]): Unit
+
+    // iallgather()
+    protected def iallgather(
+      sendBuff: mpi3.ValueBuffer[_],
+      recvBuff: mpi3.ValueBuffer[_],
+      recvCount: Int): mpi3.Request = {
+      val result = new mpi3.Request
+      mpiCall(
+        mpi3.lib.MPI_Iallgather(
+          sendBuff.pointer,
+          sendBuff.valueCount,
+          sendBuff.datatype.handle,
+          recvBuff.pointer,
+          recvCount,
+          recvBuff.datatype.handle,
+          handle,
+          result.handlePtr))
+      result
+    }
+
+    def iallgather(sendBuff: mpi3.ValueBuffer[_], recvBuff: mpi3.ValueBuffer[_]): mpi3.Request
+
+    protected def fillBlockPars(
+      bufflen: Int,
+      blocks: Seq[mpi3.Block],
+      counts: Pointer[Int],
+      displs: Pointer[Int]) {
       var idx = 0
       blocks foreach {
         case mpi3.Block(length, displacement) => {
@@ -606,10 +646,13 @@ trait CommComponent {
     }
 
     // allgatherv()
-    protected def allgatherv(
-        sendBuff: mpi3.ValueBuffer[_],
-        recvBuff: mpi3.ValueBuffer[_],
-        recvBlocks: Seq[mpi3.Block]) {
+    private def callAllgatherv(
+      sendBuff: mpi3.ValueBuffer[_],
+      recvBuff: mpi3.ValueBuffer[_],
+      recvBlocks: Seq[mpi3.Block],
+      allgathervFn: (Pointer[_], Int, mpi3.lib.MPI_Datatype, Pointer[_],
+        Pointer[Int], Pointer[Int], mpi3.lib.MPI_Datatype,
+        mpi3.lib.MPI_Comm) => Int) {
       val buffer =
         if (recvBlocks.length > 0)
           Pointer.allocateInts(2 * recvBlocks.length).as(classOf[Int])
@@ -619,9 +662,9 @@ trait CommComponent {
         val recvcounts = buffer
         val displs =
           if (buffer != Pointer.NULL) buffer.next(recvBlocks.length) else buffer
-        getBlockPars(recvBuff.valueCount, recvBlocks, recvcounts, displs)
+        fillBlockPars(recvBuff.valueCount, recvBlocks, recvcounts, displs)
         mpiCall(
-          mpi3.lib.MPI_Allgatherv(
+          allgathervFn(
             sendBuff.pointer,
             sendBuff.valueCount,
             sendBuff.datatype.handle,
@@ -635,15 +678,38 @@ trait CommComponent {
       }
     }
 
-    // alltoall()
-    protected def alltoall(
-        sendBuff: mpi3.ValueBuffer[_],
-        sendCount: Int,
-        recvBuff: mpi3.ValueBuffer[_],
-        recvCount: Int) {
+    // allgatherv()
+    protected def allgatherv(
+      sendBuff: mpi3.ValueBuffer[_],
+      recvBuff: mpi3.ValueBuffer[_],
+      recvBlocks: Seq[mpi3.Block]) {
+      callAllgatherv(sendBuff, recvBuff, recvBlocks, mpi3.lib.MPI_Allgatherv)
+    }
+
+    // iallgatherv()
+    protected def iallgatherv(
+      sendBuff: mpi3.ValueBuffer[_],
+      recvBuff: mpi3.ValueBuffer[_],
+      recvBlocks: Seq[mpi3.Block]): mpi3.Request = {
+      val result = new mpi3.Request
+      callAllgatherv(
+        sendBuff,
+        recvBuff,
+        recvBlocks,
+        mpi3.lib.MPI_Iallgatherv(_, _, _, _, _, _, _, _, result.handlePtr))
+      result
+    }
+
+    private def callAlltoall(
+      sendBuff: mpi3.ValueBuffer[_],
+      sendCount: Int,
+      recvBuff: mpi3.ValueBuffer[_],
+      recvCount: Int,
+      alltoallFn: (Pointer[_], Int, mpi3.lib.MPI_Datatype, Pointer[_], Int,
+        mpi3.lib.MPI_Datatype, mpi3.lib.MPI_Comm) => Int) {
       require(sendCount <= sendBuff.valueCount, mpi3.countExceedsLengthErrorMsg)
       mpiCall(
-        mpi3.lib.MPI_Alltoall(
+        alltoallFn(
           sendBuff.pointer,
           sendCount,
           sendBuff.datatype.handle,
@@ -653,17 +719,44 @@ trait CommComponent {
           handle))
     }
 
-    // alltoallv()
-    protected def alltoallv(
-        sendBuff: mpi3.ValueBuffer[_],
-        sendBlocks: Seq[mpi3.Block],
-        recvBuff: mpi3.ValueBuffer[_],
-        recvBlocks: Seq[mpi3.Block]) {
+    // alltoall()
+    protected def alltoall(
+      sendBuff: mpi3.ValueBuffer[_],
+      sendCount: Int,
+      recvBuff: mpi3.ValueBuffer[_],
+      recvCount: Int) {
+      callAlltoall(sendBuff, sendCount, recvBuff, recvCount, mpi3.lib.MPI_Alltoall)
+    }
+
+    // ialltoall()
+    protected def ialltoall(
+      sendBuff: mpi3.ValueBuffer[_],
+      sendCount: Int,
+      recvBuff: mpi3.ValueBuffer[_],
+      recvCount: Int): mpi3.Request = {
+      val result = new mpi3.Request
+      callAlltoall(
+        sendBuff,
+        sendCount,
+        recvBuff,
+        recvCount,
+        mpi3.lib.MPI_Ialltoall(_, _, _, _, _, _, _, result.handlePtr))
+      result
+    }
+
+    private def callAlltoallv(
+      sendBuff: mpi3.ValueBuffer[_],
+      sendBlocks: Seq[mpi3.Block],
+      recvBuff: mpi3.ValueBuffer[_],
+      recvBlocks: Seq[mpi3.Block],
+      alltoallvFn: (Pointer[_], Pointer[Int], Pointer[Int],
+        mpi3.lib.MPI_Datatype, Pointer[_], Pointer[Int], Pointer[Int],
+        mpi3.lib.MPI_Datatype, mpi3.lib.MPI_Comm) => Int) {
       require(sendBlocks.length == size, mpi3.numBlocksUnequalToSizeErrorMsg)
       val buffer =
         if (recvBlocks.length > 0 || sendBlocks.length > 0)
           Pointer.allocateInts(
-            2 * recvBlocks.length + 2 * sendBlocks.length).as(classOf[Int])
+            2 * (recvBlocks.length + sendBlocks.length)).as(classOf[Int])
         else
           nullPointer[Int]
       try {
@@ -679,10 +772,10 @@ trait CommComponent {
             buffer.next(sendBlocks.length + 2 * recvBlocks.length)
           else
             buffer
-        getBlockPars(recvBuff.valueCount, recvBlocks, recvcounts, rdispls)
-        getBlockPars(sendBuff.valueCount, sendBlocks, sendcounts, sdispls)
+        fillBlockPars(recvBuff.valueCount, recvBlocks, recvcounts, rdispls)
+        fillBlockPars(sendBuff.valueCount, sendBlocks, sendcounts, sdispls)
         mpiCall(
-          mpi3.lib.MPI_Alltoallv(
+          alltoallvFn(
             sendBuff.pointer,
             sendcounts,
             sdispls,
@@ -697,13 +790,46 @@ trait CommComponent {
       }
     }
 
-    // alltoallw()
-    protected def alltoallw(
-        sendBuff: mpi3.ValueBuffer[_],
-        sendStructs: Seq[mpi3.StructBlock[_]],
-        recvBuff: mpi3.ValueBuffer[_],
-        recvStructs: Seq[mpi3.StructBlock[_]]) {
+    // alltoallv()
+    protected def alltoallv(
+      sendBuff: mpi3.ValueBuffer[_],
+      sendBlocks: Seq[mpi3.Block],
+      recvBuff: mpi3.ValueBuffer[_],
+      recvBlocks: Seq[mpi3.Block]) {
+      callAlltoallv(
+        sendBuff,
+        sendBlocks,
+        recvBuff,
+        recvBlocks,
+        mpi3.lib.MPI_Alltoallv)
+    }
+
+    // ialltoallv()
+    protected def ialltoallv(
+      sendBuff: mpi3.ValueBuffer[_],
+      sendBlocks: Seq[mpi3.Block],
+      recvBuff: mpi3.ValueBuffer[_],
+      recvBlocks: Seq[mpi3.Block]): mpi3.Request = {
+      val result = new mpi3.Request
+      callAlltoallv(
+        sendBuff,
+        sendBlocks,
+        recvBuff,
+        recvBlocks,
+        mpi3.lib.MPI_Ialltoallv(_, _, _, _, _, _, _, _, _, result.handlePtr))
+      result
+    }
+
+    private def callAlltoallw(
+      sendBuff: mpi3.ValueBuffer[_],
+      sendStructs: Seq[mpi3.StructBlock[_]],
+      recvBuff: mpi3.ValueBuffer[_],
+      recvStructs: Seq[mpi3.StructBlock[_]],
+      alltoallwFn: (Pointer[_], Pointer[Int], Pointer[Int],
+        Pointer[mpi3.lib.MPI_Datatype], Pointer[_], Pointer[Int], Pointer[Int],
+        Pointer[mpi3.lib.MPI_Datatype], mpi3.lib.MPI_Comm) => Int) {
       require(sendStructs.length == size, mpi3.numBlocksUnequalToSizeErrorMsg)
+      require(recvStructs.length == size, mpi3.numBlocksUnequalToSizeErrorMsg)
       require(
         StructBlock.displacementsAreValid(sendStructs),
         mpi3.structBlocksAlignmentErrorMsg)
@@ -711,11 +837,11 @@ trait CommComponent {
         StructBlock.displacementsAreValid(recvStructs),
         mpi3.structBlocksAlignmentErrorMsg)
       def getStructPars(
-          buff: mpi3.ValueBuffer[_],
-          structs: Seq[mpi3.StructBlock[_]],
-          counts: Pointer[Int],
-          displs: Pointer[Int],
-          types: Pointer[mpi3.lib.MPI_Datatype]) {
+        buff: mpi3.ValueBuffer[_],
+        structs: Seq[mpi3.StructBlock[_]],
+        counts: Pointer[Int],
+        displs: Pointer[Int],
+        types: Pointer[mpi3.lib.MPI_Datatype]) {
         var idx = 0
         structs foreach {
           case mpi3.StructBlock(datatype, length, optDisp) => {
@@ -764,7 +890,7 @@ trait CommComponent {
         getStructPars(recvBuff, recvStructs, recvcounts, rdispls, recvtypes)
         getStructPars(sendBuff, sendStructs, sendcounts, sdispls, sendtypes)
         mpiCall(
-          mpi3.lib.MPI_Alltoallw(
+          alltoallwFn(
             sendBuff.pointer,
             sendcounts,
             sdispls,
@@ -780,11 +906,41 @@ trait CommComponent {
       }
     }
 
+
+    // alltoallw()
+    protected def alltoallw(
+      sendBuff: mpi3.ValueBuffer[_],
+      sendStructs: Seq[mpi3.StructBlock[_]],
+      recvBuff: mpi3.ValueBuffer[_],
+      recvStructs: Seq[mpi3.StructBlock[_]]) {
+      callAlltoallw(
+        sendBuff,
+        sendStructs,
+        recvBuff,
+        recvStructs,
+        mpi3.lib.MPI_Alltoallw)
+    }
+
+    // ialltoallw()
+    protected def ialltoallw(
+      sendBuff: mpi3.ValueBuffer[_],
+      sendStructs: Seq[mpi3.StructBlock[_]],
+      recvBuff: mpi3.ValueBuffer[_],
+      recvStructs: Seq[mpi3.StructBlock[_]]) {
+      val result = new mpi3.Request
+      callAlltoallw(
+        sendBuff,
+        sendStructs,
+        recvBuff,
+        recvStructs,
+        mpi3.lib.MPI_Ialltoallw(_, _, _, _, _, _, _, _, _, result.handlePtr))
+    }
+
     // allreduce()
     def allreduce(
-        sendBuff: mpi3.ValueBuffer[_],
-        recvBuff: mpi3.ValueBuffer[_],
-        op: mpi3.Op) {
+      sendBuff: mpi3.ValueBuffer[_],
+      recvBuff: mpi3.ValueBuffer[_],
+      op: mpi3.Op) {
       mpiCall(
         mpi3.lib.MPI_Allreduce(
           sendBuff.pointer,
@@ -795,17 +951,36 @@ trait CommComponent {
           handle))
     }
 
-    // reduceScatterBlock()
-    def reduceScatterBlock(
-        sendBuff: mpi3.ValueBuffer[_],
-        recvBuff: mpi3.ValueBuffer[_],
-        recvCount: Int,
-        op: mpi3.Op) {
+    // iallreduce()
+    def iallreduce(
+      sendBuff: mpi3.ValueBuffer[_],
+      recvBuff: mpi3.ValueBuffer[_],
+      op: mpi3.Op): mpi3.Request = {
+      val result = new mpi3.Request
+      mpiCall(
+        mpi3.lib.MPI_Iallreduce(
+          sendBuff.pointer,
+          recvBuff.pointer,
+          sendBuff.valueCount,
+          sendBuff.datatype.handle,
+          op.handle,
+          handle,
+          result.handlePtr))
+      result
+    }
+
+    private def callReduceScatterBlock(
+      sendBuff: mpi3.ValueBuffer[_],
+      recvBuff: mpi3.ValueBuffer[_],
+      recvCount: Int,
+      op: mpi3.Op,
+      reduceScatterBlockFn: (Pointer[_], Pointer[_], Int, mpi3.lib.MPI_Datatype,
+        mpi3.lib.MPI_Op, mpi3.lib.MPI_Comm) => Int) {
       require(
         sendBuff.valueCount == recvCount * size,
         mpi3.scatterBufferSizeErrorMsg)
       mpiCall(
-        mpi3.lib.MPI_Reduce_scatter_block(
+        reduceScatterBlockFn(
           sendBuff.pointer,
           recvBuff.pointer,
           recvCount,
@@ -814,19 +989,50 @@ trait CommComponent {
           handle))
     }
 
-    // reduceScatter()
-    def reduceScatter(
-        sendBuff: mpi3.ValueBuffer[_],
-        recvBuff: mpi3.ValueBuffer[_],
-        recvCounts: Seq[Int],
-        op: mpi3.Op) {
+    // reduceScatterBlock()
+    def reduceScatterBlock(
+      sendBuff: mpi3.ValueBuffer[_],
+      recvBuff: mpi3.ValueBuffer[_],
+      recvCount: Int,
+      op: mpi3.Op) {
+      callReduceScatterBlock(
+        sendBuff,
+        recvBuff,
+        recvCount,
+        op,
+        mpi3.lib.MPI_Reduce_scatter_block)
+    }
+
+    // ireduceScatterBlock()
+    def ireduceScatterBlock(
+      sendBuff: mpi3.ValueBuffer[_],
+      recvBuff: mpi3.ValueBuffer[_],
+      recvCount: Int,
+      op: mpi3.Op): mpi3.Request = {
+      val result = new mpi3.Request
+      callReduceScatterBlock(
+        sendBuff,
+        recvBuff,
+        recvCount,
+        op,
+        mpi3.lib.MPI_Ireduce_scatter_block(_, _, _, _, _, _, result.handlePtr))
+      result
+    }
+
+    private def callReduceScatter(
+      sendBuff: mpi3.ValueBuffer[_],
+      recvBuff: mpi3.ValueBuffer[_],
+      recvCounts: Seq[Int],
+      op: mpi3.Op,
+      reduceScatterFn: (Pointer[_], Pointer[_], Pointer[Int],
+        mpi3.lib.MPI_Datatype, mpi3.lib.MPI_Op, mpi3.lib.MPI_Comm) => Int) {
       require(
         sendBuff.valueCount == recvCounts.sum,
         mpi3.scatterBufferSizeErrorMsg)
       val rcvcnts = Pointer.pointerToInts(recvCounts:_*).as(classOf[Int])
       try {
         mpiCall(
-          mpi3.lib.MPI_Reduce_scatter(
+          reduceScatterFn(
             sendBuff.pointer,
             recvBuff.pointer,
             rcvcnts,
@@ -834,6 +1040,36 @@ trait CommComponent {
             op.handle,
             handle))
       } finally rcvcnts.release()
+    }
+
+    // reduceScatter()
+    def reduceScatter(
+      sendBuff: mpi3.ValueBuffer[_],
+      recvBuff: mpi3.ValueBuffer[_],
+      recvCounts: Seq[Int],
+      op: mpi3.Op) {
+      callReduceScatter(
+        sendBuff,
+        recvBuff,
+        recvCounts,
+        op,
+        mpi3.lib.MPI_Reduce_scatter)
+    }
+
+    // ireduceScatter()
+    def ireduceScatter(
+      sendBuff: mpi3.ValueBuffer[_],
+      recvBuff: mpi3.ValueBuffer[_],
+      recvCounts: Seq[Int],
+      op: mpi3.Op): mpi3.Request = {
+      val result = new mpi3.Request
+      callReduceScatter(
+        sendBuff,
+        recvBuff,
+        recvCounts,
+        op,
+        mpi3.lib.MPI_Ireduce_scatter(_, _, _, _, _, _, result.handlePtr))
+      result
     }
 
     protected def setName(s: Pointer[Byte]) {
@@ -855,15 +1091,15 @@ trait CommComponent {
 
     def isNull: Boolean = handle == mpi3.lib.MPI_COMM_NULL
 
-    // def encode(codec: mpi3.PackedCodec, blocks: mpi3.ValueSeq[_]*): PackedValueBuffer[_] =
-    //   codec.encodeTo(this, blocks:_*)
+    def info: mpi3.Info = {
+      val result = new mpi3.Info()
+      mpiCall(mpi3.lib.MPI_Comm_get_info(handle, result.handlePtr))
+      result
+    }
 
-    // def packedValueBuffer[_](codec: mpi3.PackedCodec) =
-    //   new PackedValueBuffer[_](
-    //     this,
-    //     mpi3.CommBuffer(codec.maxSize),
-    //     codec.maxSize.toInt,
-    //     codec)
+    def info_=(newInfo: mpi3.Info) {
+      mpiCall(mpi3.lib.MPI_Comm_set_info(handle, newInfo.handle))
+    }
   }
 
   sealed class IntraComm protected[scampi3] () extends Comm {
@@ -876,11 +1112,20 @@ trait CommComponent {
     override def split(colorOpt: Option[Int], key: Int): Option[IntraComm] =
       super.split(colorOpt, key).map(_.asInstanceOf[IntraComm])
 
+    def createGroup(group: mpi3.Group, tag: Int): Option[Comm] = {
+      withOutVar { newComm: Pointer[mpi3.lib.MPI_Comm] =>
+        mpiCall(
+          mpi3.lib.MPI_Comm_create_group(handle, group.handle, tag, newComm))
+        if (newComm(0) != mpi3.lib.MPI_COMM_NULL) Some(Comm(newComm(0)))
+        else None
+      }
+    }
+
     def createIntercomm(
-        localLeader: Int,
-        peerComm: Comm,
-        remoteLeader: Int,
-        tag: Int): InterComm =
+      localLeader: Int,
+      peerComm: Comm,
+      remoteLeader: Int,
+      tag: Int): InterComm =
       withOutVar { newComm: Pointer[mpi3.lib.MPI_Comm] =>
         mpiCall(
           mpi3.lib.MPI_Intercomm_create(
@@ -894,11 +1139,11 @@ trait CommComponent {
       }
 
     def spawn(
-        command: String,
-        argv: Seq[String],
-        maxprocs: Int,
-        info: Info,
-        root: Int): (InterComm, Seq[Int]) = {
+      command: String,
+      argv: Seq[String],
+      maxprocs: Int,
+      info: Info,
+      root: Int): (InterComm, Seq[Int]) = {
       require(maxprocs > 0, "maxprocs must be positive")
       val commandp = Pointer.pointerToCString(command).as(classOf[Byte])
       val argvp =
@@ -927,12 +1172,12 @@ trait CommComponent {
     }
 
     def spawnObjects(
-        objectName: String,
-        objectArgs: Seq[String],
-        scalaArgs: Seq[String],
-        maxprocs: Int,
-        info: Info,
-        root: Int): (InterComm, Seq[Int]) = {
+      objectName: String,
+      objectArgs: Seq[String],
+      scalaArgs: Seq[String],
+      maxprocs: Int,
+      info: Info,
+      root: Int): (InterComm, Seq[Int]) = {
       val properties = new SystemProperties
       val pathSeparator = properties("path.separator")
       val currentClasspath =
@@ -960,207 +1205,294 @@ trait CommComponent {
         root)
     }
 
-    // gather(), for root
-    def gatherIn(sendBuff: mpi3.ValueBuffer[_], recvBuff: mpi3.ValueBuffer[_]) {
-      require(recvBuff.valueCount >= size, mpi3.gatherBufferSizeErrorMsg)
-      mpiCall(
-        mpi3.lib.MPI_Gather(
-          sendBuff.pointer,
-          sendBuff.valueCount,
-          sendBuff.datatype.handle,
-          recvBuff.pointer,
-          recvBuff.valueCount / size,
-          recvBuff.datatype.handle,
-          rank, handle))
-    }
-
-    // gather(), for non-root
-    def gatherOut(buff: mpi3.ValueBuffer[_], root: Int) {
-      mpiCall(
-        mpi3.lib.MPI_Gather(
-          buff.pointer,
-          buff.valueCount,
-          buff.datatype.handle,
-          nullPointer[Byte],
-          0,
-          mpi3.lib.MPI_DATATYPE_NULL,
-          root,
-          handle))
-    }
-
-    // gather(), for any rank
-    def gather(
-        sendBuff: mpi3.ValueBuffer[_],
-        recvBuff: mpi3.ValueBuffer[_],
-        root: Int) {
-      if (root == rank) gatherIn(sendBuff, recvBuff)
-      else gatherOut(sendBuff, root)
-    }
-
-    // gatherv(), for root
-    def gathervIn(
-        sendBuff: mpi3.ValueBuffer[_],
-        recvBuff: mpi3.ValueBuffer[_],
-        recvBlocks: Seq[mpi3.Block]) {
-      require(recvBlocks.length == size, mpi3.gatherBufferSizeErrorMsg)
-      assume(recvBlocks.length > 0)
-      val buffer = Pointer.allocateInts(2 * recvBlocks.length).as(classOf[Int])
-      try {
-        val recvcounts = buffer
-        val displs = buffer.next(recvBlocks.length)
-        var idx = 0
-        recvBlocks.foreach( _ match {
-          case mpi3.Block(length, displacement) => {
-            require(
-              0 <= displacement && displacement + length <= recvBuff.valueCount,
-              mpi3.bufferCompatibilityErrorMsg)
-            recvcounts(idx) = length
-            displs(idx) = displacement
-            idx += 1
-          }
-        })
+    private def callGather(
+      sendBuff: mpi3.ValueBuffer[_],
+      recvBuff: mpi3.ValueBuffer[_],
+      root: Int,
+      gatherFn: (Pointer[_], Int, mpi3.lib.MPI_Datatype, Pointer[_], Int,
+        mpi3.lib.MPI_Datatype, Int, mpi3.lib.MPI_Comm) => Int) {
+      // gather(), for root
+      def gatherIn() {
+        require(recvBuff.valueCount >= size, mpi3.gatherBufferSizeErrorMsg)
         mpiCall(
-          mpi3.lib.MPI_Gatherv(
+          gatherFn(
             sendBuff.pointer,
             sendBuff.valueCount,
             sendBuff.datatype.handle,
             recvBuff.pointer,
-            recvcounts,
-            displs,
+            recvBuff.valueCount / size,
             recvBuff.datatype.handle,
             rank,
             handle))
-      } finally buffer.release()
-    }
-
-    // gatherv(), for non-root
-    def gathervOut(buff: mpi3.ValueBuffer[_], root: Int) {
-      mpiCall(
-        mpi3.lib.MPI_Gatherv(
-          buff.pointer,
-          buff.valueCount,
-          buff.datatype.handle,
-          nullPointer[Byte],
-          nullPointer[Int],
-          nullPointer[Int],
-          mpi3.lib.MPI_DATATYPE_NULL,
-          root,
-          handle))
-    }
-
-    // gatherv(), for any rank
-    def gatherv(
-        sendBuff: mpi3.ValueBuffer[_],
-        recvBuff: mpi3.ValueBuffer[_],
-        recvBlocks: Seq[mpi3.Block],
-        root: Int) {
-      if (root == rank) gathervIn(sendBuff, recvBuff, recvBlocks)
-      else gathervOut(sendBuff, root)
-    }
-
-    // scatter(), for root
-    def scatterOut(
-        sendBuff: mpi3.ValueBuffer[_],
-        sendCount: Int,
-        recvBuff: mpi3.ValueBuffer[_]) {
-      require(
-        sendCount * size <= sendBuff.valueCount,
-        mpi3.scatterBufferSizeErrorMsg)
-      mpiCall(
-        mpi3.lib.MPI_Scatter(
-          sendBuff.pointer,
-          sendCount,
-          sendBuff.datatype.handle,
-          recvBuff.pointer,
-          recvBuff.valueCount,
-          recvBuff.datatype.handle,
-          rank,
-          handle))
-    }
-
-    // scatter(), for non-root
-    def scatterIn(buff: mpi3.ValueBuffer[_], root: Int) {
-      mpiCall(
-        mpi3.lib.MPI_Scatter(
-          nullPointer[Byte],
-          0,
-          mpi3.lib.MPI_DATATYPE_NULL,
-          buff.pointer,
-          buff.valueCount,
-          buff.datatype.handle,
-          root,
-          handle))
-    }
-
-    // scatter(), for any rank
-    def scatter(
-        sendBuff: mpi3.ValueBuffer[_],
-        sendCount: Int,
-        recvBuff: mpi3.ValueBuffer[_],
-        root: Int) {
-      if (root == rank) scatterOut(sendBuff, sendCount, recvBuff)
-      else scatterIn(recvBuff, root)
-    }
-
-    // scatterv(), for root
-    def scattervOut(
-        sendBuff: mpi3.ValueBuffer[_],
-        sendBlocks: Seq[mpi3.Block],
-        recvBuff: mpi3.ValueBuffer[_]) {
-      require(sendBlocks.length == size, mpi3.scatterBufferSizeErrorMsg)
-      assume(sendBlocks.length > 0)
-      val buffer = Pointer.allocateInts(2 * sendBlocks.length).as(classOf[Int])
-      try {
-        val sendcounts = buffer
-        val displs = buffer.next(sendBlocks.length)
-        var idx = 0
-        sendBlocks.foreach( _ match {
-          case mpi3.Block(length, displacement) => {
-            require(
-              0 <= displacement && displacement + length <= sendBuff.valueCount,
-              mpi3.bufferCompatibilityErrorMsg)
-            sendcounts(idx) = length
-            displs(idx) = displacement
-            idx += 1
-          }
-        })
+      }
+      // gather(), for non-root
+      def gatherOut() {
         mpiCall(
-          mpi3.lib.MPI_Scatterv(
+          gatherFn(
             sendBuff.pointer,
-            sendcounts,
-            displs,
+            sendBuff.valueCount,
+            sendBuff.datatype.handle,
+            nullPointer[Byte],
+            0,
+            mpi3.lib.MPI_DATATYPE_NULL,
+            root,
+            handle))
+      }
+      if (root == rank) gatherIn()
+      else gatherOut()
+    }
+
+    // gather()
+    def gather(
+      sendBuff: mpi3.ValueBuffer[_],
+      recvBuff: mpi3.ValueBuffer[_],
+      root: Int) {
+      callGather(sendBuff, recvBuff, root, mpi3.lib.MPI_Gather)
+    }
+
+    // igather()
+    def igather(
+      sendBuff: mpi3.ValueBuffer[_],
+      recvBuff: mpi3.ValueBuffer[_],
+      root: Int): mpi3.Request = {
+      val result = new mpi3.Request
+      callGather(
+        sendBuff,
+        recvBuff,
+        root,
+        mpi3.lib.MPI_Igather(_, _, _, _, _, _, _, _, result.handlePtr))
+      result
+    }
+
+    private def callGatherv(
+      sendBuff: mpi3.ValueBuffer[_],
+      recvBuff: mpi3.ValueBuffer[_],
+      recvBlocks: Seq[mpi3.Block],
+      root: Int,
+      gathervFn: (Pointer[_], Int, mpi3.lib.MPI_Datatype, Pointer[_],
+        Pointer[Int], Pointer[Int], mpi3.lib.MPI_Datatype, Int,
+        mpi3.lib.MPI_Comm) => Int) {
+      // gatherv(), for root
+      def gathervIn() {
+        require(recvBlocks.length == size, mpi3.gatherBufferSizeErrorMsg)
+        assume(recvBlocks.length > 0)
+        val buffer = Pointer.allocateInts(2 * recvBlocks.length).as(classOf[Int])
+        try {
+          val recvcounts = buffer
+          val displs = buffer.next(recvBlocks.length)
+          var idx = 0
+          recvBlocks.foreach( _ match {
+            case mpi3.Block(length, displacement) => {
+              require(
+                0 <= displacement && displacement + length <= recvBuff.valueCount,
+                mpi3.bufferCompatibilityErrorMsg)
+              recvcounts(idx) = length
+              displs(idx) = displacement
+              idx += 1
+            }
+          })
+          mpiCall(
+            gathervFn(
+              sendBuff.pointer,
+              sendBuff.valueCount,
+              sendBuff.datatype.handle,
+              recvBuff.pointer,
+              recvcounts,
+              displs,
+              recvBuff.datatype.handle,
+              rank,
+              handle))
+        } finally buffer.release()
+      }
+      // gatherv(), for non-root
+      def gathervOut() {
+        mpiCall(
+          gathervFn(
+            sendBuff.pointer,
+            sendBuff.valueCount,
+            sendBuff.datatype.handle,
+            nullPointer[Byte],
+            nullPointer[Int],
+            nullPointer[Int],
+            mpi3.lib.MPI_DATATYPE_NULL,
+            root,
+            handle))
+      }
+      if (root == rank) gathervIn()
+      else gathervOut()
+    }
+
+    // gatherv()
+    def gatherv(
+      sendBuff: mpi3.ValueBuffer[_],
+      recvBuff: mpi3.ValueBuffer[_],
+      recvBlocks: Seq[mpi3.Block],
+      root: Int) {
+      callGatherv(sendBuff, recvBuff, recvBlocks, root, mpi3.lib.MPI_Gatherv)
+    }
+
+    // igatherv()
+    def igatherv(
+      sendBuff: mpi3.ValueBuffer[_],
+      recvBuff: mpi3.ValueBuffer[_],
+      recvBlocks: Seq[mpi3.Block],
+      root: Int): mpi3.Request = {
+      val result = new mpi3.Request
+      callGatherv(
+        sendBuff,
+        recvBuff,
+        recvBlocks,
+        root,
+        mpi3.lib.MPI_Igatherv(_, _, _, _, _, _, _, _, _, result.handlePtr))
+      result
+    }
+
+    private def callScatter(
+      sendBuff: mpi3.ValueBuffer[_],
+      sendCount: Int,
+      recvBuff: mpi3.ValueBuffer[_],
+      root: Int,
+      scatterFn: (Pointer[_], Int, mpi3.lib.MPI_Datatype, Pointer[_], Int,
+        mpi3.lib.MPI_Datatype, Int, mpi3.lib.MPI_Comm) => Int) {
+      // scatter(), for root
+      def scatterOut() {
+        require(
+          sendCount * size <= sendBuff.valueCount,
+          mpi3.scatterBufferSizeErrorMsg)
+        mpiCall(
+          scatterFn(
+            sendBuff.pointer,
+            sendCount,
             sendBuff.datatype.handle,
             recvBuff.pointer,
             recvBuff.valueCount,
             recvBuff.datatype.handle,
             rank,
             handle))
-      } finally buffer.release()
+      }
+
+      // scatter(), for non-root
+      def scatterIn() {
+        mpiCall(
+          scatterFn(
+            nullPointer[Byte],
+            0,
+            mpi3.lib.MPI_DATATYPE_NULL,
+            recvBuff.pointer,
+            recvBuff.valueCount,
+            recvBuff.datatype.handle,
+            root,
+            handle))
+      }
+      if (root == rank) scatterOut()
+      else scatterIn()
     }
 
-    // scatterv(), for non-root
-    def scattervIn(buff: mpi3.ValueBuffer[_], root: Int) {
-      mpiCall(
-        mpi3.lib.MPI_Scatterv(
-          nullPointer[Byte],
-          nullPointer[Int],
-          nullPointer[Int],
-          mpi3.lib.MPI_DATATYPE_NULL,
-          buff.pointer,
-          buff.valueCount,
-          buff.datatype.handle,
-          root,
-          handle))
+    // scatter()
+    def scatter(
+      sendBuff: mpi3.ValueBuffer[_],
+      sendCount: Int,
+      recvBuff: mpi3.ValueBuffer[_],
+      root: Int) {
+      callScatter(sendBuff, sendCount, recvBuff, root, mpi3.lib.MPI_Scatter)
     }
 
-    // scatterv(), for any rank
+    // iscatter()
+    def iscatter(
+      sendBuff: mpi3.ValueBuffer[_],
+      sendCount: Int,
+      recvBuff: mpi3.ValueBuffer[_],
+      root: Int): mpi3.Request = {
+      val result = new mpi3.Request
+      callScatter(
+        sendBuff,
+        sendCount,
+        recvBuff,
+        root,
+        mpi3.lib.MPI_Iscatter(_, _, _, _, _, _, _, _, result.handlePtr))
+      result
+    }
+
+    private def callScatterv(
+      sendBuff: mpi3.ValueBuffer[_],
+      sendBlocks: Seq[mpi3.Block],
+      recvBuff: mpi3.ValueBuffer[_],
+      root: Int,
+      scattervFn: (Pointer[_], Pointer[Int], Pointer[Int], mpi3.lib.MPI_Datatype,
+        Pointer[_], Int, mpi3.lib.MPI_Datatype, Int, mpi3.lib.MPI_Comm) => Int) {
+      // scatterv(), for root
+      def scattervOut() {
+        require(sendBlocks.length == size, mpi3.scatterBufferSizeErrorMsg)
+        assume(sendBlocks.length > 0)
+        val buffer = Pointer.allocateInts(2 * sendBlocks.length).as(classOf[Int])
+        try {
+          val sendcounts = buffer
+          val displs = buffer.next(sendBlocks.length)
+          var idx = 0
+          sendBlocks.foreach( _ match {
+            case mpi3.Block(length, displacement) => {
+              require(
+                0 <= displacement && displacement + length <= sendBuff.valueCount,
+                mpi3.bufferCompatibilityErrorMsg)
+              sendcounts(idx) = length
+              displs(idx) = displacement
+              idx += 1
+            }
+          })
+          mpiCall(
+            scattervFn(
+              sendBuff.pointer,
+              sendcounts,
+              displs,
+              sendBuff.datatype.handle,
+              recvBuff.pointer,
+              recvBuff.valueCount,
+              recvBuff.datatype.handle,
+              rank,
+              handle))
+        } finally buffer.release()
+      }
+      // scatterv(), for non-root
+      def scattervIn() {
+        mpiCall(
+          scattervFn(
+            nullPointer[Byte],
+            nullPointer[Int],
+            nullPointer[Int],
+            mpi3.lib.MPI_DATATYPE_NULL,
+            recvBuff.pointer,
+            recvBuff.valueCount,
+            recvBuff.datatype.handle,
+            root,
+            handle))
+      }
+      if (root == rank) scattervOut()
+      else scattervIn()
+    }
+
+    // scatterv()
     def scatterv(
-        sendBuff: mpi3.ValueBuffer[_],
-        sendBlocks: Seq[mpi3.Block],
-        recvBuff: mpi3.ValueBuffer[_],
-        root: Int) {
-      if (root == rank) scattervOut(sendBuff, sendBlocks, recvBuff)
-      else scattervIn(recvBuff, root)
+      sendBuff: mpi3.ValueBuffer[_],
+      sendBlocks: Seq[mpi3.Block],
+      recvBuff: mpi3.ValueBuffer[_],
+      root: Int) {
+      callScatterv(sendBuff, sendBlocks, recvBuff, root, mpi3.lib.MPI_Scatterv)
+    }
+
+    // iscatterv()
+    def iscatterv(
+      sendBuff: mpi3.ValueBuffer[_],
+      sendBlocks: Seq[mpi3.Block],
+      recvBuff: mpi3.ValueBuffer[_],
+      root: Int): mpi3.Request = {
+      val result = new mpi3.Request
+      callScatterv(
+        sendBuff,
+        sendBlocks,
+        recvBuff,
+        root,
+        mpi3.lib.MPI_Iscatterv(_, _, _, _, _, _, _, _, _, result.handlePtr))
+      result
     }
 
     // allgather()
@@ -1168,87 +1500,155 @@ trait CommComponent {
       allgather(sendBuff, recvBuff, recvBuff.valueCount / size)
     }
 
+    // iallgather()
+    def iallgather(
+      sendBuff: mpi3.ValueBuffer[_],
+      recvBuff: mpi3.ValueBuffer[_]): mpi3.Request =
+      iallgather(sendBuff, recvBuff, recvBuff.valueCount / size)
+
     // allgatherv()
     override def allgatherv(
-        sendBuff: mpi3.ValueBuffer[_],
-        recvBuff: mpi3.ValueBuffer[_],
-        recvBlocks: Seq[mpi3.Block]) {
+      sendBuff: mpi3.ValueBuffer[_],
+      recvBuff: mpi3.ValueBuffer[_],
+      recvBlocks: Seq[mpi3.Block]) {
       require(recvBlocks.length == size, mpi3.gatherBufferSizeErrorMsg)
       super.allgatherv(sendBuff, recvBuff, recvBlocks)
     }
 
+    // iallgatherv()
+    override def iallgatherv(
+      sendBuff: mpi3.ValueBuffer[_],
+      recvBuff: mpi3.ValueBuffer[_],
+      recvBlocks: Seq[mpi3.Block]): mpi3.Request = {
+      require(recvBlocks.length == size, mpi3.gatherBufferSizeErrorMsg)
+      super.iallgatherv(sendBuff, recvBuff, recvBlocks)
+    }
+
     // alltoall()
     override def alltoall(
-        sendBuff: mpi3.ValueBuffer[_],
-        sendCount: Int,
-        recvBuff: mpi3.ValueBuffer[_],
-        recvCount: Int) {
+      sendBuff: mpi3.ValueBuffer[_],
+      sendCount: Int,
+      recvBuff: mpi3.ValueBuffer[_],
+      recvCount: Int) {
       require(
         recvCount * size <= recvBuff.valueCount,
         mpi3.gatherBufferSizeErrorMsg)
       super.alltoall(sendBuff, sendCount, recvBuff, recvCount)
     }
 
+    // ialltoall()
+    override def ialltoall(
+      sendBuff: mpi3.ValueBuffer[_],
+      sendCount: Int,
+      recvBuff: mpi3.ValueBuffer[_],
+      recvCount: Int): mpi3.Request = {
+      require(
+        recvCount * size <= recvBuff.valueCount,
+        mpi3.gatherBufferSizeErrorMsg)
+      super.ialltoall(sendBuff, sendCount, recvBuff, recvCount)
+    }
+
     // alltoallv()
     override def alltoallv(
-        sendBuff: mpi3.ValueBuffer[_],
-        sendBlocks: Seq[mpi3.Block],
-        recvBuff: mpi3.ValueBuffer[_],
-        recvBlocks: Seq[mpi3.Block]) {
+      sendBuff: mpi3.ValueBuffer[_],
+      sendBlocks: Seq[mpi3.Block],
+      recvBuff: mpi3.ValueBuffer[_],
+      recvBlocks: Seq[mpi3.Block]) {
       require(recvBlocks.length == size, mpi3.gatherBufferSizeErrorMsg)
       super.alltoallv(sendBuff, sendBlocks, recvBuff, recvBlocks)
     }
 
+    // ialltoallv()
+    override def ialltoallv(
+      sendBuff: mpi3.ValueBuffer[_],
+      sendBlocks: Seq[mpi3.Block],
+      recvBuff: mpi3.ValueBuffer[_],
+      recvBlocks: Seq[mpi3.Block]): mpi3.Request = {
+      require(recvBlocks.length == size, mpi3.gatherBufferSizeErrorMsg)
+      super.ialltoallv(sendBuff, sendBlocks, recvBuff, recvBlocks)
+    }
+
     // alltoallw()
     override def alltoallw(
-        sendBuff: mpi3.ValueBuffer[_],
-        sendStructs: Seq[mpi3.StructBlock[_]],
-        recvBuff: mpi3.ValueBuffer[_],
-        recvStructs: Seq[mpi3.StructBlock[_]]) {
+      sendBuff: mpi3.ValueBuffer[_],
+      sendStructs: Seq[mpi3.StructBlock[_]],
+      recvBuff: mpi3.ValueBuffer[_],
+      recvStructs: Seq[mpi3.StructBlock[_]]) {
       require(recvStructs.length == size, mpi3.gatherBufferSizeErrorMsg)
       super.alltoallw(sendBuff, sendStructs, recvBuff, recvStructs)
     }
 
-    // reduce(), for root
-    def reduceIn(
-        sendBuff: mpi3.ValueBuffer[_],
-        recvBuff: mpi3.ValueBuffer[_],
-        op: mpi3.Op) {
-      require(
-        sendBuff.valueCount == recvBuff.valueCount,
-        mpi3.reduceBufferLengthErrorMsg)
-      mpiCall(
-        mpi3.lib.MPI_Reduce(
-          sendBuff.pointer,
-          recvBuff.pointer,
-          sendBuff.valueCount,
-          sendBuff.datatype.handle,
-          op.handle,
-          rank,
-          handle))
+    // ialltoallw()
+    override def ialltoallw(
+      sendBuff: mpi3.ValueBuffer[_],
+      sendStructs: Seq[mpi3.StructBlock[_]],
+      recvBuff: mpi3.ValueBuffer[_],
+      recvStructs: Seq[mpi3.StructBlock[_]]) {
+      require(recvStructs.length == size, mpi3.gatherBufferSizeErrorMsg)
+      super.ialltoallw(sendBuff, sendStructs, recvBuff, recvStructs)
     }
 
-    // reduce(), for non-root
-    def reduceOut(buff: mpi3.ValueBuffer[_], op: mpi3.Op, root: Int) {
-      mpiCall(
-        mpi3.lib.MPI_Reduce(
-          buff.pointer,
-          nullPointer[Byte],
-          buff.valueCount,
-          buff.datatype.handle,
-          op.handle,
-          root,
-          handle))
+    private def callReduce(
+      sendBuff: mpi3.ValueBuffer[_],
+      recvBuff: mpi3.ValueBuffer[_],
+      op: mpi3.Op,
+      root: Int,
+      reduceFn: (Pointer[_], Pointer[_], Int, mpi3.lib.MPI_Datatype,
+        mpi3.lib.MPI_Op, Int, mpi3.lib.MPI_Comm) => Int) {
+      // reduce(), for root
+      def reduceIn() {
+        require(
+          sendBuff.valueCount == recvBuff.valueCount,
+          mpi3.reduceBufferLengthErrorMsg)
+        mpiCall(
+          reduceFn(
+            sendBuff.pointer,
+            recvBuff.pointer,
+            sendBuff.valueCount,
+            sendBuff.datatype.handle,
+            op.handle,
+            rank,
+            handle))
+      }
+      // reduce(), for non-root
+      def reduceOut() {
+        mpiCall(
+          reduceFn(
+            sendBuff.pointer,
+            nullPointer[Byte],
+            sendBuff.valueCount,
+            sendBuff.datatype.handle,
+            op.handle,
+            root,
+            handle))
+      }
+      if (root == rank) reduceIn()
+      else reduceOut()
     }
 
-    // reduce(), for any rank
+    // reduce()
     def reduce(
-        sendBuff: mpi3.ValueBuffer[_],
-        recvBuff: mpi3.ValueBuffer[_],
-        op: mpi3.Op,
-        root: Int) {
-      if (root == rank) reduceIn(sendBuff, recvBuff, op)
-      else reduceOut(sendBuff, op, root)
+      sendBuff: mpi3.ValueBuffer[_],
+      recvBuff: mpi3.ValueBuffer[_],
+      op: mpi3.Op,
+      root: Int) {
+      callReduce(sendBuff, recvBuff, op, root, mpi3.lib.MPI_Reduce)
+    }
+
+    // ireduce()
+    def ireduce(
+      sendBuff: mpi3.ValueBuffer[_],
+      recvBuff: mpi3.ValueBuffer[_],
+      op: mpi3.Op,
+      root: Int): mpi3.Request = {
+      val result = new mpi3.Request
+      callReduce(
+        sendBuff,
+        recvBuff,
+        op,
+        root,
+        mpi3.lib.MPI_Ireduce(_, _, _, _, _, _, _, result.handlePtr))
+      result
     }
 
     // bcast()
@@ -1262,68 +1662,121 @@ trait CommComponent {
           handle))
     }
 
+    // ibcast()
+    def ibcast(buff: mpi3.ValueBuffer[_], root: Int): mpi3.Request = {
+      val result = new mpi3.Request
+      mpiCall(
+        mpi3.lib.MPI_Ibcast(
+          buff.pointer,
+          buff.valueCount,
+          buff.datatype.handle,
+          root,
+          handle,
+          result.handlePtr))
+      result
+    }
+
+    private def callScan(
+      sendBuff: mpi3.ValueBuffer[_],
+      recvBuff: mpi3.ValueBuffer[_],
+      op: mpi3.Op,
+      scanFn: (Pointer[_], Pointer[_], Int, mpi3.lib.MPI_Datatype,
+        mpi3.lib.MPI_Op, mpi3.lib.MPI_Comm) => Int) {
+      require(
+        sendBuff.valueCount == recvBuff.valueCount,
+        mpi3.reduceBufferLengthErrorMsg)
+      mpiCall(
+        scanFn(
+          sendBuff.pointer,
+          recvBuff.pointer,
+          sendBuff.valueCount,
+          sendBuff.datatype.handle,
+          op.handle,
+          handle))
+    }
+
     // scan()
     def scan(
-        sendBuff: mpi3.ValueBuffer[_],
-        recvBuff: mpi3.ValueBuffer[_],
-        op: mpi3.Op) {
-      require(
-        sendBuff.valueCount == recvBuff.valueCount,
-        mpi3.reduceBufferLengthErrorMsg)
-      mpiCall(
-        mpi3.lib.MPI_Scan(
-          sendBuff.pointer,
-          recvBuff.pointer,
-          sendBuff.valueCount,
-          sendBuff.datatype.handle,
-          op.handle,
-          handle))
+      sendBuff: mpi3.ValueBuffer[_],
+      recvBuff: mpi3.ValueBuffer[_],
+      op: mpi3.Op) {
+      callScan(sendBuff, recvBuff, op, mpi3.lib.MPI_Scan)
     }
 
-    // exscan(), for root
-    def exscanRoot(sendBuff: mpi3.ValueBuffer[_], op: mpi3.Op) {
-      require(rank == 0, "exscanRoot called from non-root rank")
-      mpiCall(
-        mpi3.lib.MPI_Exscan(
-          sendBuff.pointer,
-          nullPointer[Byte],
-          sendBuff.valueCount,
-          sendBuff.datatype.handle,
-          op.handle,
-          handle))
+    // iscan()
+    def iscan(
+      sendBuff: mpi3.ValueBuffer[_],
+      recvBuff: mpi3.ValueBuffer[_],
+      op: mpi3.Op): mpi3.Request = {
+      val result = new mpi3.Request
+      callScan(
+        sendBuff,
+        recvBuff,
+        op,
+        mpi3.lib.MPI_Iscan(_, _, _, _, _, _, result.handlePtr))
+      result
     }
 
-    // exscan(), for non-root
-    def exscanNonRoot(
-        sendBuff: mpi3.ValueBuffer[_],
-        recvBuff: mpi3.ValueBuffer[_],
-        op: mpi3.Op) {
-      require(rank != 0, "exscanNonRoot called from root rank")
-      require(
-        sendBuff.valueCount == recvBuff.valueCount,
-        mpi3.reduceBufferLengthErrorMsg)
-      mpiCall(
-        mpi3.lib.MPI_Exscan(
-          sendBuff.pointer,
-          recvBuff.pointer,
-          sendBuff.valueCount,
-          sendBuff.datatype.handle,
-          op.handle,
-          handle))
+    private def callExscan(
+      sendBuff: mpi3.ValueBuffer[_],
+      recvBuff: mpi3.ValueBuffer[_],
+      op: mpi3.Op,
+      exscanFn: (Pointer[_], Pointer[_], Int, mpi3.lib.MPI_Datatype,
+        mpi3.lib.MPI_Op, mpi3.lib.MPI_Comm) => Int) {
+      // exscan(), for root
+      def exscanRoot() {
+        mpiCall(
+          exscanFn(
+            sendBuff.pointer,
+            nullPointer[Byte],
+            sendBuff.valueCount,
+            sendBuff.datatype.handle,
+            op.handle,
+            handle))
+      }
+      // exscan(), for non-root
+      def exscanNonRoot() {
+        require(
+          sendBuff.valueCount == recvBuff.valueCount,
+          mpi3.reduceBufferLengthErrorMsg)
+        mpiCall(
+          exscanFn(
+            sendBuff.pointer,
+            recvBuff.pointer,
+            sendBuff.valueCount,
+            sendBuff.datatype.handle,
+            op.handle,
+            handle))
+      }
+      if (rank == 0) exscanRoot()
+      else exscanNonRoot()
     }
 
-    // exscan(), for any rank
+    // exscan()
     def exscan(
-        sendBuff: mpi3.ValueBuffer[_],
-        recvBuff: mpi3.ValueBuffer[_],
-        op: mpi3.Op) {
-      if (rank == 0) exscanRoot(sendBuff, op)
-      else exscanNonRoot(sendBuff, recvBuff, op)
+      sendBuff: mpi3.ValueBuffer[_],
+      recvBuff: mpi3.ValueBuffer[_],
+      op: mpi3.Op) {
+      callExscan(sendBuff, recvBuff, op, mpi3.lib.MPI_Exscan)
+    }
+
+    // iexscan()
+    def iexscan(
+      sendBuff: mpi3.ValueBuffer[_],
+      recvBuff: mpi3.ValueBuffer[_],
+      op: mpi3.Op): mpi3.Request = {
+      val result = new mpi3.Request
+      callExscan(
+        sendBuff,
+        recvBuff,
+        op,
+        mpi3.lib.MPI_Iexscan(_, _, _, _, _, _, result.handlePtr))
+      result
     }
 
     def cartCreate(
-        dims: Seq[(Int, Boolean)],
-        reorder: Boolean): Option[CartComm] = {
+      dims: Seq[(Int, Boolean)],
+      reorder: Boolean): Option[CartComm] = {
       require(
         dims.forall(d => 0 < d._1),
         "Cartesion grid size in each dimension must be at least one")
@@ -1365,8 +1818,8 @@ trait CommComponent {
     }
 
     def graphCreate(
-        neighbors: Seq[Seq[Int]],
-        reorder: Boolean): Option[GraphComm] = {
+      neighbors: Seq[Seq[Int]],
+      reorder: Boolean): Option[GraphComm] = {
       require(neighbors.length <= size, "Graph size cannot exceed group size")
       require(
         neighbors.forall(ns => ns.forall(n => 0 <= n && n < neighbors.length)),
@@ -1413,9 +1866,9 @@ trait CommComponent {
     }
 
     def distGraphCreate(
-        edges: Seq[(Int, Seq[(Int, Option[Int])])],
-        info: Info,
-        reorder: Boolean): DistGraphComm = {
+      edges: Seq[(Int, Seq[(Int, Option[Int])])],
+      info: Info,
+      reorder: Boolean): DistGraphComm = {
       val weighted =
         edges.nonEmpty && edges(0)._2.nonEmpty && edges(0)._2(0)._2.isDefined
       require(
@@ -1485,7 +1938,7 @@ trait CommComponent {
               sources,
               degrees,
               destinations,
-              weights,
+              if (edges.length > 0) weights else mpi3.lib.MPI_WEIGHTS_EMPTY,
               info.handle,
               if (reorder) 1 else 0,
               newComm))
@@ -1497,22 +1950,22 @@ trait CommComponent {
     }
 
     def distGraphCreateAdjacent(
-        sourceEdges: Seq[(Int, Option[Int])],
-        destinationEdges: Seq[(Int, Option[Int])],
-        info: Info,
-        reorder: Boolean): DistGraphComm = {
+      sourceEdges: Seq[(Int, Option[Int])],
+      destinationEdges: Seq[(Int, Option[Int])],
+      info: Info,
+      reorder: Boolean): DistGraphComm = {
       val weighted = List(sourceEdges, destinationEdges).map(edges => {
         edges.nonEmpty && edges(0)._2.isDefined
       })
       require(
-        List(sourceEdges, destinationEdges).zip(weighted).forall(_ match {
+        List(sourceEdges, destinationEdges).zip(weighted).forall {
           case (edges, wgtd) => edges.forall(e => e._2.isDefined == wgtd)
-        }),
+        },
         "Inconsistent assignment of edge weights")
       require(
-        List(sourceEdges, destinationEdges).zip(weighted).forall(_ match {
+        List(sourceEdges, destinationEdges).zip(weighted).forall {
           case (edges, wgtd) => !wgtd || edges.forall(e => e._2.get >= 0)
-        }),
+        },
         "Invalid edge weight(s)")
       val buffer =
         if (sourceEdges.length > 0 || destinationEdges.length > 0)
@@ -1531,20 +1984,29 @@ trait CommComponent {
           val destinations =
             if (buffer != Pointer.NULL) buffer.next(offset) else buffer
           offset += destinationEdges.length
+          val weights =
+            if (buffer != Pointer.NULL) buffer.next(offset)
+            else buffer
           val sourceweights =
-            if (weighted(0)) {
-              val prevOffset = offset
-              offset += sourceEdges.length
-              if (buffer != Pointer.NULL) buffer.next(prevOffset) else buffer
+            if (sourceEdges.length > 0) {
+              if (weighted(0)) {
+                val prevOffset = offset
+                offset += sourceEdges.length
+                buffer.next(prevOffset)
+              } else {
+                mpi3.lib.MPI_UNWEIGHTED
+              }
             } else {
-              mpi3.lib.MPI_UNWEIGHTED
+              mpi3.lib.MPI_WEIGHTS_EMPTY
             }
           val destweights =
-            if (weighted(1)) {
-              if (buffer != Pointer.NULL) buffer.next(offset) else buffer
-            }
-            else {
-              mpi3.lib.MPI_UNWEIGHTED
+            if (destinationEdges.length > 0) {
+              if (weighted(1))
+                buffer.next(offset)
+              else
+                mpi3.lib.MPI_UNWEIGHTED
+            } else {
+              mpi3.lib.MPI_WEIGHTS_EMPTY
             }
           var rIdx = 0
           var wgtIdx = 0
@@ -1555,7 +2017,7 @@ trait CommComponent {
                   sources.set(rIdx, r)
                   rIdx += 1
                   wgtOpt.foreach(w => {
-                    sourceweights.set(wgtIdx, w)
+                    weights.set(wgtIdx, w)
                     wgtIdx += 1
                   })
                 }
@@ -1581,13 +2043,6 @@ trait CommComponent {
       }
     }
 
-    def winCreate(
-        base: Pointer[_],
-        size: Long,
-        dispUnit: Int,
-        info: mpi3.Info): mpi3.Win =
-      new Win(base, size, dispUnit, info, this)
-
     def accept(portName: String, info: mpi3.Info, root: Int): InterComm =
       withOutVar{ newComm: Pointer[mpi3.lib.MPI_Comm] =>
         mpiCall(
@@ -1611,6 +2066,59 @@ trait CommComponent {
             newComm))
         Comm(newComm(0)).asInstanceOf[InterComm]
       }
+
+    def winCreate(base: Pointer[_], size: Long, dispUnit: Int, info: mpi3.Info):
+        mpi3.WinCreate = {
+      val result = new mpi3.WinCreate(base)
+      mpiCall(
+        mpi3.lib.MPI_Win_create(
+          base,
+          size,
+          dispUnit,
+          info.handle,
+          handle,
+          result.handlePtr))
+      Win.register(result)
+      result
+    }
+
+    def winAllocate(size: Long, dispUnit: Int, info: mpi3.Info):
+        mpi3.WinAllocate = {
+      val result = new mpi3.WinAllocate
+      mpiCall(
+        mpi3.lib.MPI_Win_allocate(
+          size,
+          dispUnit,
+          info.handle,
+          handle,
+          result.basePtr,
+          result.handlePtr))
+      Win.register(result)
+      result
+    }
+
+    def winAllocateShared(size: Long, dispUnit: Int, info: mpi3.Info):
+        mpi3.WinShared = {
+      val result = new mpi3.WinShared
+      mpiCall(
+        mpi3.lib.MPI_Win_allocate_shared(
+          size,
+          dispUnit,
+          info.handle,
+          handle,
+          result.basePtr,
+          result.handlePtr))
+      Win.register(result)
+      result
+    }
+
+    def winCreateDynamic(info: mpi3.Info): mpi3.WinDynamic = {
+      val result = new mpi3.WinDynamic
+      mpiCall(
+        mpi3.lib.MPI_Win_create_dynamic(info.handle, handle, result.handlePtr))
+      Win.register(result)
+      result
+    }
   }
 
   final class InterComm protected[scampi3] () extends Comm {
@@ -1645,68 +2153,674 @@ trait CommComponent {
 
     def remote(rank: Int) = RemoteRank(this, rank)
 
-    // gather(), for root
-    def gatherIn(buff: mpi3.ValueBuffer[_], recvCount: Int) {
-      require(
-        recvCount * remoteSize <= buff.valueCount,
-        mpi3.gatherBufferSizeErrorMsg)
-      mpiCall(
-        mpi3.lib.MPI_Gather(
-          nullPointer[Byte],
-          0,
-          mpi3.lib.MPI_DATATYPE_NULL,
-          buff.pointer,
-          recvCount,
-          buff.datatype.handle,
-          mpi3.lib.MPI_ROOT,
-          handle))
-    }
-
-    // gather(), for non-root in receiving group
-    def gatherIn() {
-      mpiCall(
-        mpi3.lib.MPI_Gather(
-          nullPointer[Byte],
-          0,
-          mpi3.lib.MPI_DATATYPE_NULL,
-          nullPointer[Byte],
-          0,
-          mpi3.lib.MPI_DATATYPE_NULL,
-          mpi3.lib.MPI_PROC_NULL,
-          handle))
-    }
-
-    // gather(), for any rank in sending group
-    def gatherOut(buff: mpi3.ValueBuffer[_], root: mpi3.GroupRank) {
-      require(root.group == remoteGroup, "gather root not in remote group")
-      mpiCall(
-        mpi3.lib.MPI_Gather(
-          buff.pointer,
-          buff.valueCount,
-          buff.datatype.handle,
-          nullPointer[Byte],
-          0,
-          mpi3.lib.MPI_DATATYPE_NULL,
-          root.rank,
-          handle))
-    }
-
-    // gather(), for any rank in either group
-    def gather(
-       sendBuff: mpi3.ValueBuffer[_],
-       recvBuff: mpi3.ValueBuffer[_],
-       recvCount: Int,
-       root: mpi3.GroupRank) {
-      if (root.group == group) {
-        if (root.rank == rank) gatherIn(recvBuff, recvCount)
-        else gatherIn()
+    private def callGather(
+      sendBuff: mpi3.ValueBuffer[_],
+      recvBuff: mpi3.ValueBuffer[_],
+      recvCount: Int,
+      root: mpi3.GroupRank,
+      gatherFn: (Pointer[_], Int, mpi3.lib.MPI_Datatype, Pointer[_], Int,
+        mpi3.lib.MPI_Datatype, Int, mpi3.lib.MPI_Comm) => Int) {
+      // gather(), for root
+      def gatherInRoot() {
+        require(
+          recvCount * remoteSize <= recvBuff.valueCount,
+          mpi3.gatherBufferSizeErrorMsg)
+        mpiCall(
+          gatherFn(
+            nullPointer[Byte],
+            0,
+            mpi3.lib.MPI_DATATYPE_NULL,
+            recvBuff.pointer,
+            recvCount,
+            recvBuff.datatype.handle,
+            mpi3.lib.MPI_ROOT,
+            handle))
       }
-      else gatherOut(sendBuff, root)
+      // gather(), for non-root in receiving group
+      def gatherInNonRoot() {
+        mpiCall(
+          gatherFn(
+            nullPointer[Byte],
+            0,
+            mpi3.lib.MPI_DATATYPE_NULL,
+            nullPointer[Byte],
+            0,
+            mpi3.lib.MPI_DATATYPE_NULL,
+            mpi3.lib.MPI_PROC_NULL,
+            handle))
+      }
+      // gather(), for any rank in sending group
+      def gatherOut() {
+        mpiCall(
+          gatherFn(
+            sendBuff.pointer,
+            sendBuff.valueCount,
+            sendBuff.datatype.handle,
+            nullPointer[Byte],
+            0,
+            mpi3.lib.MPI_DATATYPE_NULL,
+            root.rank,
+            handle))
+      }
+      if (root.group == group) {
+        if (root.rank == rank) gatherInRoot()
+        else gatherInNonRoot()
+      }
+      else gatherOut()
     }
 
-    // gatherv(), for root
-    def gathervIn(buff: mpi3.ValueBuffer[_], recvBlocks: Seq[mpi3.Block]) {
+    // gather()
+    def gather(
+      sendBuff: mpi3.ValueBuffer[_],
+      recvBuff: mpi3.ValueBuffer[_],
+      recvCount: Int,
+      root: mpi3.GroupRank) {
+      callGather(sendBuff, recvBuff, recvCount, root, mpi3.lib.MPI_Gather)
+    }
+
+    // igather()
+    def igather(
+      sendBuff: mpi3.ValueBuffer[_],
+      recvBuff: mpi3.ValueBuffer[_],
+      recvCount: Int,
+      root: mpi3.GroupRank): mpi3.Request = {
+      val result = new mpi3.Request
+      callGather(
+        sendBuff,
+        recvBuff,
+        recvCount,
+        root,
+        mpi3.lib.MPI_Igather(_, _, _, _, _, _, _, _, result.handlePtr))
+      result
+    }
+
+    private def callGatherv(
+      sendBuff: mpi3.ValueBuffer[_],
+      recvBuff: mpi3.ValueBuffer[_],
+      recvBlocks: Seq[mpi3.Block],
+      root: mpi3.GroupRank,
+      gathervFn: (Pointer[_], Int, mpi3.lib.MPI_Datatype, Pointer[_],
+        Pointer[Int], Pointer[Int], mpi3.lib.MPI_Datatype, Int,
+        mpi3.lib.MPI_Comm) => Int) {
+      // gatherv(), for root
+      def gathervInRoot() {
+        require(recvBlocks.length == remoteSize, mpi3.gatherBufferSizeErrorMsg)
+        val buffer =
+          if (recvBlocks.length > 0)
+            Pointer.allocateInts(2 * recvBlocks.length).as(classOf[Int])
+          else
+            nullPointer[Int]
+        try {
+          val recvcounts = buffer
+          val displs =
+            if (buffer != Pointer.NULL) buffer.next(recvBlocks.length) else buffer
+          var idx = 0
+          recvBlocks.foreach( _ match {
+            case mpi3.Block(length, displacement) => {
+              require(
+                0 <= displacement && displacement + length <= recvBuff.valueCount,
+                mpi3.bufferCompatibilityErrorMsg)
+              recvcounts.set(idx, length)
+              displs.set(idx, displacement)
+              idx += 1
+            }
+          })
+          mpiCall(
+            gathervFn(
+              nullPointer[Byte],
+              0,
+              mpi3.lib.MPI_DATATYPE_NULL,
+              recvBuff.pointer,
+              recvcounts,
+              displs,
+              recvBuff.datatype.handle,
+              mpi3.lib.MPI_ROOT,
+              handle))
+        } finally {
+          if (buffer != Pointer.NULL) buffer.release()
+        }
+      }
+      // gatherv(), for non-root in receiving group
+      def gathervInNonRoot() {
+        mpiCall(
+          gathervFn(
+            nullPointer[Byte],
+            0,
+            mpi3.lib.MPI_DATATYPE_NULL,
+            nullPointer[Byte],
+            nullPointer[Int],
+            nullPointer[Int],
+            mpi3.lib.MPI_DATATYPE_NULL,
+            mpi3.lib.MPI_PROC_NULL,
+            handle))
+      }
+      // gatherv(), for any rank in sending group
+      def gathervOut() {
+        mpiCall(
+          gathervFn(
+            sendBuff.pointer,
+            sendBuff.valueCount,
+            sendBuff.datatype.handle,
+            nullPointer[Byte],
+            nullPointer[Int],
+            nullPointer[Int],
+            mpi3.lib.MPI_DATATYPE_NULL,
+            root.rank,
+            handle))
+      }
+      if (root.group == group) {
+        if (root.rank == rank) gathervInRoot()
+        else gathervInNonRoot()
+      }
+      else gathervOut()
+    }
+
+    // gatherv()
+    def gatherv(
+      sendBuff: mpi3.ValueBuffer[_],
+      recvBuff: mpi3.ValueBuffer[_],
+      recvBlocks: Seq[mpi3.Block],
+      root: mpi3.GroupRank) {
+      callGatherv(sendBuff, recvBuff, recvBlocks, root, mpi3.lib.MPI_Gatherv)
+    }
+
+    // igatherv()
+    def igatherv(
+      sendBuff: mpi3.ValueBuffer[_],
+      recvBuff: mpi3.ValueBuffer[_],
+      recvBlocks: Seq[mpi3.Block],
+      root: mpi3.GroupRank): mpi3.Request = {
+      val result = new mpi3.Request
+      callGatherv(
+        sendBuff,
+        recvBuff,
+        recvBlocks,
+        root,
+        mpi3.lib.MPI_Igatherv(_, _, _, _, _, _, _, _, _, result.handlePtr))
+      result
+    }
+
+    private def callScatter(
+      sendBuff: mpi3.ValueBuffer[_],
+      sendCount: Int,
+      recvBuff: mpi3.ValueBuffer[_],
+      root: mpi3.GroupRank,
+      scatterFn: (Pointer[_], Int, mpi3.lib.MPI_Datatype, Pointer[_], Int,
+        mpi3.lib.MPI_Datatype, Int, mpi3.lib.MPI_Comm) => Int) {
+      // scatter(), for root
+      def scatterOutRoot() {
+        require(
+          sendCount * remoteSize <= sendBuff.valueCount,
+          mpi3.scatterBufferSizeErrorMsg)
+        mpiCall(
+          scatterFn(
+            sendBuff.pointer,
+            sendCount,
+            sendBuff.datatype.handle,
+            nullPointer[Byte],
+            0,
+            mpi3.lib.MPI_DATATYPE_NULL,
+            mpi3.lib.MPI_ROOT,
+            handle))
+      }
+      // scatter(), for non-root in sending group
+      def scatterOutNonRoot() {
+        mpiCall(
+          scatterFn(
+            nullPointer[Byte],
+            0,
+            mpi3.lib.MPI_DATATYPE_NULL,
+            nullPointer[Byte],
+            0,
+            mpi3.lib.MPI_DATATYPE_NULL,
+            mpi3.lib.MPI_PROC_NULL,
+            handle))
+      }
+      // scatter(), for any rank in receiving group
+      def scatterIn() {
+        mpiCall(
+          scatterFn(
+            nullPointer[Byte],
+            0,
+            mpi3.lib.MPI_DATATYPE_NULL,
+            recvBuff.pointer,
+            recvBuff.valueCount,
+            recvBuff.datatype.handle,
+            root.rank,
+            handle))
+      }
+      if (root.group == group) {
+        if (root.rank == rank) scatterOutRoot()
+        else scatterOutNonRoot()
+      }
+      else scatterIn()
+    }
+
+    // scatter()
+    def scatter(
+      sendBuff: mpi3.ValueBuffer[_],
+      sendCount: Int,
+      recvBuff: mpi3.ValueBuffer[_],
+      root: mpi3.GroupRank) {
+      callScatter(sendBuff, sendCount, recvBuff, root, mpi3.lib.MPI_Scatter)
+    }
+
+    // iscatter()
+    def iscatter(
+      sendBuff: mpi3.ValueBuffer[_],
+      sendCount: Int,
+      recvBuff: mpi3.ValueBuffer[_],
+      root: mpi3.GroupRank): mpi3.Request = {
+      val result = new mpi3.Request
+      callScatter(
+        sendBuff,
+        sendCount,
+        recvBuff,
+        root,
+        mpi3.lib.MPI_Iscatter(_, _, _, _, _, _, _, _, result.handlePtr))
+      result
+    }
+
+    private def callScatterv(
+      sendBuff: mpi3.ValueBuffer[_],
+      sendBlocks: Seq[mpi3.Block],
+      recvBuff: mpi3.ValueBuffer[_],
+      root: mpi3.GroupRank,
+      scattervFn: (Pointer[_], Pointer[Int], Pointer[Int], mpi3.lib.MPI_Datatype,
+        Pointer[_], Int, mpi3.lib.MPI_Datatype, Int, mpi3.lib.MPI_Comm) => Int) {
+      // scatterv(), for root
+      def scattervOutRoot() {
+        require(sendBlocks.length == remoteSize, mpi3.scatterBufferSizeErrorMsg)
+        assume(sendBlocks.length > 0)
+        val buffer = Pointer.allocateInts(2 * sendBlocks.length).as(classOf[Int])
+        try {
+          val sendcounts = buffer
+          val displs = buffer.next(sendBlocks.length)
+          var idx = 0
+          sendBlocks.foreach( _ match {
+            case mpi3.Block(length, displacement) => {
+              require(
+                0 <= displacement && displacement + length <= sendBuff.valueCount,
+                mpi3.bufferCompatibilityErrorMsg)
+              sendcounts.set(idx, length)
+              displs.set(idx, displacement)
+              idx += 1
+            }
+          })
+          mpiCall(
+            scattervFn(
+              sendBuff.pointer,
+              sendcounts,
+              displs,
+              sendBuff.datatype.handle,
+              nullPointer[Byte],
+              0,
+              mpi3.lib.MPI_DATATYPE_NULL,
+              mpi3.lib.MPI_ROOT,
+              handle))
+        } finally buffer.release()
+      }
+      // scatterv(), for non-root in sending group
+      def scattervOutNonRoot() {
+        mpiCall(
+          scattervFn(
+            nullPointer[Byte],
+            nullPointer[Int],
+            nullPointer[Int],
+            mpi3.lib.MPI_DATATYPE_NULL,
+            nullPointer[Byte],
+            0,
+            mpi3.lib.MPI_DATATYPE_NULL,
+            mpi3.lib.MPI_PROC_NULL,
+            handle))
+      }
+      // scatterv(), for any rank in receiving group
+      def scattervIn() {
+        mpiCall(
+          scattervFn(
+            nullPointer[Byte],
+            nullPointer[Int],
+            nullPointer[Int],
+            mpi3.lib.MPI_DATATYPE_NULL,
+            recvBuff.pointer,
+            recvBuff.valueCount,
+            recvBuff.datatype.handle,
+            root.rank,
+            handle))
+      }
+      if (root.group == group) {
+        if (root.rank == rank) scattervOutRoot()
+        else scattervOutNonRoot()
+      }
+      else scattervIn()
+    }
+
+    // scatterv()
+    def scatterv(
+      sendBuff: mpi3.ValueBuffer[_],
+      sendBlocks: Seq[mpi3.Block],
+      recvBuff: mpi3.ValueBuffer[_],
+      root: mpi3.GroupRank) {
+      callScatterv(sendBuff, sendBlocks, recvBuff, root, mpi3.lib.MPI_Scatterv)
+    }
+
+    // iscatterv()
+    def iscatterv(
+      sendBuff: mpi3.ValueBuffer[_],
+      sendBlocks: Seq[mpi3.Block],
+      recvBuff: mpi3.ValueBuffer[_],
+      root: mpi3.GroupRank): mpi3.Request = {
+      val result = new mpi3.Request
+      callScatterv(
+        sendBuff,
+        sendBlocks,
+        recvBuff,
+        root,
+        mpi3.lib.MPI_Iscatterv(_, _, _, _, _, _, _, _, _, result.handlePtr))
+      result
+    }
+
+    // allgather()
+    def allgather(sendBuff: mpi3.ValueBuffer[_], recvBuff: mpi3.ValueBuffer[_]) {
+      allgather(sendBuff, recvBuff, recvBuff.valueCount / remoteSize)
+    }
+
+    // iallgather()
+    def iallgather(
+      sendBuff: mpi3.ValueBuffer[_],
+      recvBuff: mpi3.ValueBuffer[_]):
+        mpi3.Request =
+      iallgather(sendBuff, recvBuff, recvBuff.valueCount / remoteSize)
+
+    // allgatherv()
+    override def allgatherv(
+      sendBuff: mpi3.ValueBuffer[_],
+      recvBuff: mpi3.ValueBuffer[_],
+      recvBlocks: Seq[mpi3.Block]) {
       require(recvBlocks.length == remoteSize, mpi3.gatherBufferSizeErrorMsg)
+      super.allgatherv(sendBuff, recvBuff, recvBlocks)
+    }
+
+    // iallgatherv()
+    override def iallgatherv(
+      sendBuff: mpi3.ValueBuffer[_],
+      recvBuff: mpi3.ValueBuffer[_],
+      recvBlocks: Seq[mpi3.Block]): mpi3.Request = {
+      require(recvBlocks.length == remoteSize, mpi3.gatherBufferSizeErrorMsg)
+      super.iallgatherv(sendBuff, recvBuff, recvBlocks)
+    }
+
+    // alltoall()
+    override def alltoall(
+      sendBuff: mpi3.ValueBuffer[_],
+      sendCount: Int,
+      recvBuff: mpi3.ValueBuffer[_],
+      recvCount: Int) {
+      require(
+        recvCount * remoteSize <= recvBuff.valueCount,
+        mpi3.gatherBufferSizeErrorMsg)
+      super.alltoall(sendBuff, sendCount, recvBuff, recvCount)
+    }
+
+    // ialltoall()
+    override def ialltoall(
+      sendBuff: mpi3.ValueBuffer[_],
+      sendCount: Int,
+      recvBuff: mpi3.ValueBuffer[_],
+      recvCount: Int): mpi3.Request = {
+      require(
+        recvCount * remoteSize <= recvBuff.valueCount,
+        mpi3.gatherBufferSizeErrorMsg)
+      super.ialltoall(sendBuff, sendCount, recvBuff, recvCount)
+    }
+
+    // alltoallv()
+    override def alltoallv(
+      sendBuff: mpi3.ValueBuffer[_],
+      sendBlocks: Seq[mpi3.Block],
+      recvBuff: mpi3.ValueBuffer[_],
+      recvBlocks: Seq[mpi3.Block]) {
+      require(recvBlocks.length == remoteSize, mpi3.gatherBufferSizeErrorMsg)
+      super.alltoallv(sendBuff, sendBlocks, recvBuff, recvBlocks)
+    }
+
+    // ialltoallv()
+    override def ialltoallv(
+      sendBuff: mpi3.ValueBuffer[_],
+      sendBlocks: Seq[mpi3.Block],
+      recvBuff: mpi3.ValueBuffer[_],
+      recvBlocks: Seq[mpi3.Block]): mpi3.Request = {
+      require(recvBlocks.length == remoteSize, mpi3.gatherBufferSizeErrorMsg)
+      super.ialltoallv(sendBuff, sendBlocks, recvBuff, recvBlocks)
+    }
+
+    // alltoallw()
+    override def alltoallw(
+      sendBuff: mpi3.ValueBuffer[_],
+      sendStructs: Seq[mpi3.StructBlock[_]],
+      recvBuff: mpi3.ValueBuffer[_],
+      recvStructs: Seq[mpi3.StructBlock[_]]) {
+      require(recvStructs.length == remoteSize, mpi3.gatherBufferSizeErrorMsg)
+      super.alltoallw(sendBuff, sendStructs, recvBuff, recvStructs)
+    }
+
+    // ialltoallw()
+    override def ialltoallw(
+      sendBuff: mpi3.ValueBuffer[_],
+      sendStructs: Seq[mpi3.StructBlock[_]],
+      recvBuff: mpi3.ValueBuffer[_],
+      recvStructs: Seq[mpi3.StructBlock[_]]) {
+      require(recvStructs.length == remoteSize, mpi3.gatherBufferSizeErrorMsg)
+      super.ialltoallw(sendBuff, sendStructs, recvBuff, recvStructs)
+    }
+
+    private def callReduce(
+      sendBuff: mpi3.ValueBuffer[_],
+      recvBuff: mpi3.ValueBuffer[_],
+      op: mpi3.Op,
+      root: mpi3.GroupRank,
+      reduceFn: (Pointer[_], Pointer[_], Int, mpi3.lib.MPI_Datatype,
+        mpi3.lib.MPI_Op, Int, mpi3.lib.MPI_Comm) => Int) {
+      // reduce(), for root (in receiving group)
+      def reduceInRoot() {
+        mpiCall(
+          reduceFn(
+            nullPointer[Byte],
+            recvBuff.pointer,
+            recvBuff.valueCount,
+            recvBuff.datatype.handle,
+            op.handle,
+            mpi3.lib.MPI_ROOT,
+            handle))
+      }
+      // reduce(), for non-root in receiving group
+      def reduceInNonRoot() {
+        mpiCall(
+          reduceFn(
+            nullPointer[Byte],
+            nullPointer[Byte],
+            0,
+            mpi3.lib.MPI_DATATYPE_NULL,
+            op.handle,
+            mpi3.lib.MPI_PROC_NULL,
+            handle))
+      }
+      // reduce(), for any rank in sending group
+      def reduceOut() {
+        mpiCall(
+          reduceFn(
+            sendBuff.pointer,
+            nullPointer[Byte],
+            sendBuff.valueCount,
+            sendBuff.datatype.handle,
+            op.handle,
+            root.rank,
+            handle))
+      }
+      if (root.group == group) {
+        if (root.rank == rank) reduceInRoot()
+        else reduceInNonRoot()
+      }
+      else reduceOut()
+    }
+
+    // reduce()
+    def reduce(
+      sendBuff: mpi3.ValueBuffer[_],
+      recvBuff: mpi3.ValueBuffer[_],
+      op: mpi3.Op,
+      root: mpi3.GroupRank) {
+      callReduce(sendBuff, recvBuff, op, root, mpi3.lib.MPI_Reduce)
+    }
+
+    // ireduce()
+    def ireduce(
+      sendBuff: mpi3.ValueBuffer[_],
+      recvBuff: mpi3.ValueBuffer[_],
+      op: mpi3.Op,
+      root: mpi3.GroupRank): mpi3.Request = {
+      val result = new mpi3.Request
+      callReduce(
+        sendBuff,
+        recvBuff,
+        op,
+        root,
+        mpi3.lib.MPI_Ireduce(_, _, _, _, _, _, _, result.handlePtr))
+      result
+    }
+
+    // bcast()
+    def bcast(buff: mpi3.ValueBuffer[_], root: mpi3.GroupRank) {
+      // bcast(), for root (in sending group)
+      def bcastOutRoot() {
+        mpiCall(
+          mpi3.lib.MPI_Bcast(
+            buff.pointer,
+            buff.valueCount,
+            buff.datatype.handle,
+            mpi3.lib.MPI_ROOT,
+            handle))
+      }
+      // bcast(), for non-root in sending group
+      def bcastOutNonRoot() {
+        mpiCall(
+          mpi3.lib.MPI_Bcast(
+            nullPointer[Byte],
+            0,
+            mpi3.lib.MPI_DATATYPE_NULL,
+            mpi3.lib.MPI_PROC_NULL,
+            handle))
+      }
+      // bcast(), for any rank in receiving group
+      def bcastIn() {
+        mpiCall(
+          mpi3.lib.MPI_Bcast(
+            buff.pointer,
+            buff.valueCount,
+            buff.datatype.handle,
+            root.rank,
+            handle))
+      }
+      if (root.group == group) {
+        if (root.rank == rank) bcastOutRoot()
+        else bcastOutNonRoot()
+      } else bcastIn()
+    }
+
+    // ibcast()
+    def ibcast(buff: mpi3.ValueBuffer[_], root: mpi3.GroupRank): mpi3.Request = {
+      val result = new mpi3.Request
+      // ibcast(), for root (in sending group)
+      def ibcastOutRoot() {
+        mpiCall(
+          mpi3.lib.MPI_Ibcast(
+            buff.pointer,
+            buff.valueCount,
+            buff.datatype.handle,
+            mpi3.lib.MPI_ROOT,
+            handle,
+            result.handlePtr))
+      }
+
+      // ibcast(), for non-root in sending group
+      def ibcastOutNonRoot() {
+        mpiCall(
+          mpi3.lib.MPI_Ibcast(
+            nullPointer[Byte],
+            0,
+            mpi3.lib.MPI_DATATYPE_NULL,
+            mpi3.lib.MPI_PROC_NULL,
+            handle,
+            result.handlePtr))
+      }
+
+      // ibcast(), for any rank in receiving group
+      def ibcastIn() {
+        mpiCall(
+          mpi3.lib.MPI_Ibcast(
+            buff.pointer,
+            buff.valueCount,
+            buff.datatype.handle,
+            root.rank,
+            handle,
+            result.handlePtr))
+      }
+      if (root.group == group) {
+        if (root.rank == rank) ibcastOutRoot()
+        else ibcastOutNonRoot()
+      } else ibcastIn()
+      result
+    }
+  }
+
+  trait Neighborhood {
+    self: Comm =>
+
+    protected val inDegree: Int
+
+    protected val outDegree: Int
+
+    private def callNeighborAllgather(
+      sendBuff: mpi3.ValueBuffer[_],
+      recvBuff: mpi3.ValueBuffer[_],
+      neighborAllgatherFn: (Pointer[_], Int, mpi3.lib.MPI_Datatype, Pointer[_],
+        Int, mpi3.lib.MPI_Datatype, mpi3.lib.MPI_Comm) => Int) {
+      mpiCall(
+       neighborAllgatherFn(
+         sendBuff.pointer,
+         sendBuff.valueCount,
+         sendBuff.datatype.handle,
+         recvBuff.pointer,
+         if (inDegree > 0) recvBuff.valueCount / inDegree else 0,
+         recvBuff.datatype.handle,
+         handle))
+    }
+
+    def neighborAllgather(
+      sendBuff: mpi3.ValueBuffer[_],
+      recvBuff: mpi3.ValueBuffer[_]) {
+      callNeighborAllgather(sendBuff, recvBuff, mpi3.lib.MPI_Neighbor_allgather)
+    }
+
+    def ineighborAllgather(
+      sendBuff: mpi3.ValueBuffer[_],
+      recvBuff: mpi3.ValueBuffer[_]): mpi3.Request = {
+      val result = new mpi3.Request
+      callNeighborAllgather(
+        sendBuff,
+        recvBuff,
+        mpi3.lib.MPI_Ineighbor_allgather(_, _, _, _, _, _, _, result.handlePtr))
+      result
+    }
+
+    private def callNeighborAllgatherv(
+      sendBuff: mpi3.ValueBuffer[_],
+      recvBuff: mpi3.ValueBuffer[_],
+      recvBlocks: Seq[mpi3.Block],
+      neighborAllgathervFn: (Pointer[_], Int, mpi3.lib.MPI_Datatype, Pointer[_],
+        Pointer[Int], Pointer[Int], mpi3.lib.MPI_Datatype,
+        mpi3.lib.MPI_Comm) => Int) {
+      require(recvBlocks.length == inDegree, numBlocksUnequalToInDegreeErrorMsg)
       val buffer =
         if (recvBlocks.length > 0)
           Pointer.allocateInts(2 * recvBlocks.length).as(classOf[Int])
@@ -1716,297 +2830,265 @@ trait CommComponent {
         val recvcounts = buffer
         val displs =
           if (buffer != Pointer.NULL) buffer.next(recvBlocks.length) else buffer
-        var idx = 0
-        recvBlocks.foreach( _ match {
-          case mpi3.Block(length, displacement) => {
-            require(
-              0 <= displacement && displacement + length <= buff.valueCount,
-              mpi3.bufferCompatibilityErrorMsg)
-            recvcounts.set(idx, length)
-            displs.set(idx, displacement)
-            idx += 1
-          }
-        })
+        fillBlockPars(recvBuff.valueCount, recvBlocks, recvcounts, displs)
         mpiCall(
-          mpi3.lib.MPI_Gatherv(
-            nullPointer[Byte],
-            0,
-            mpi3.lib.MPI_DATATYPE_NULL,
-            buff.pointer,
+          neighborAllgathervFn(
+            sendBuff.pointer,
+            sendBuff.valueCount,
+            sendBuff.datatype.handle,
+            recvBuff.pointer,
             recvcounts,
             displs,
-            buff.datatype.handle,
-            mpi3.lib.MPI_ROOT,
+            recvBuff.datatype.handle,
             handle))
       } finally {
         if (buffer != Pointer.NULL) buffer.release()
       }
     }
 
-    // gatherv(), for non-root in receiving group
-    def gathervIn() {
+    def neighborAllgatherv(
+      sendBuff: mpi3.ValueBuffer[_],
+      recvBuff: mpi3.ValueBuffer[_],
+      recvBlocks: Seq[mpi3.Block]) {
+      callNeighborAllgatherv(
+        sendBuff,
+        recvBuff,
+        recvBlocks,
+        mpi3.lib.MPI_Neighbor_allgatherv)
+    }
+
+    def ineighborAllgatherv(
+      sendBuff: mpi3.ValueBuffer[_],
+      recvBuff: mpi3.ValueBuffer[_],
+      recvBlocks: Seq[mpi3.Block]): mpi3.Request = {
+      val result = new mpi3.Request
+      callNeighborAllgatherv(
+        sendBuff,
+        recvBuff,
+        recvBlocks,
+        mpi3.lib.MPI_Ineighbor_allgatherv(
+          _, _, _, _, _, _, _, _, result.handlePtr))
+      result
+    }
+
+    private def callNeighborAlltoall(
+      sendBuff: mpi3.ValueBuffer[_],
+      recvBuff: mpi3.ValueBuffer[_],
+      neighborAlltoallFn: (Pointer[_], Int, mpi3.lib.MPI_Datatype, Pointer[_],
+        Int, mpi3.lib.MPI_Datatype, mpi3.lib.MPI_Comm) => Int) {
       mpiCall(
-        mpi3.lib.MPI_Gatherv(
-          nullPointer[Byte],
-          0,
-          mpi3.lib.MPI_DATATYPE_NULL,
-          nullPointer[Byte],
-          nullPointer[Int],
-          nullPointer[Int],
-          mpi3.lib.MPI_DATATYPE_NULL,
-          mpi3.lib.MPI_PROC_NULL,
+        neighborAlltoallFn(
+          sendBuff.pointer,
+          if (outDegree > 0) sendBuff.valueCount / outDegree else 0,
+          sendBuff.datatype.handle,
+          recvBuff.pointer,
+          if (inDegree > 0) recvBuff.valueCount / inDegree else 0,
+          recvBuff.datatype.handle,
           handle))
     }
 
-    // gatherv(), for any rank in sending group
-    def gathervOut(buff: mpi3.ValueBuffer[_], root: mpi3.GroupRank) {
-      require(root.group == remoteGroup, "gather root not in remote group")
-      mpiCall(
-        mpi3.lib.MPI_Gatherv(
-          buff.pointer,
-          buff.valueCount,
-          buff.datatype.handle,
-          nullPointer[Byte],
-          nullPointer[Int],
-          nullPointer[Int],
-          mpi3.lib.MPI_DATATYPE_NULL,
-          root.rank,
-          handle))
+    def neighborAlltoall(
+      sendBuff: mpi3.ValueBuffer[_],
+      recvBuff: mpi3.ValueBuffer[_]) {
+      callNeighborAlltoall(sendBuff, recvBuff, mpi3.lib.MPI_Neighbor_alltoall)
     }
 
-    // gatherv(), for any rank in either group
-    def gatherv(
-        sendBuff: mpi3.ValueBuffer[_],
-        recvBuff: mpi3.ValueBuffer[_],
-        recvBlocks: Seq[mpi3.Block],
-        root: mpi3.GroupRank) {
-      if (root.group == group) {
-        if (root.rank == rank) gathervIn(recvBuff, recvBlocks)
-        else gathervIn()
-      }
-      else gathervOut(sendBuff, root)
+    def ineighborAlltoall(
+      sendBuff: mpi3.ValueBuffer[_],
+      recvBuff: mpi3.ValueBuffer[_]): mpi3.Request = {
+      val result = new mpi3.Request
+      callNeighborAlltoall(
+        sendBuff,
+        recvBuff,
+        mpi3.lib.MPI_Ineighbor_alltoall(_, _, _, _, _, _, _, result.handlePtr))
+      result
     }
 
-    // scatterv(), for root
-    def scattervOut(sendBuff: mpi3.ValueBuffer[_], sendBlocks: Seq[mpi3.Block]) {
-      require(sendBlocks.length == remoteSize, mpi3.scatterBufferSizeErrorMsg)
-      assume(sendBlocks.length > 0)
-      val buffer = Pointer.allocateInts(2 * sendBlocks.length).as(classOf[Int])
+    private def callNeighborAlltoallv(
+      sendBuff: mpi3.ValueBuffer[_],
+      sendBlocks: Seq[mpi3.Block],
+      recvBuff: mpi3.ValueBuffer[_],
+      recvBlocks: Seq[mpi3.Block],
+      neighborAlltoallvFn: (Pointer[_], Pointer[Int], Pointer[Int],
+        mpi3.lib.MPI_Datatype, Pointer[_],
+        Pointer[Int], Pointer[Int], mpi3.lib.MPI_Datatype,
+        mpi3.lib.MPI_Comm) => Int) {
+      require(sendBlocks.length == outDegree, numBlocksUnequalToOutDegreeErrorMsg)
+      require(recvBlocks.length == inDegree, numBlocksUnequalToInDegreeErrorMsg)
+      val buffer =
+        if (recvBlocks.length > 0 || sendBlocks.length > 0)
+          Pointer.allocateInts(
+            2 * (recvBlocks.length + sendBlocks.length)).as(classOf[Int])
+        else
+          nullPointer[Int]
       try {
-        val sendcounts = buffer
-        val displs = buffer.next(sendBlocks.length)
-        var idx = 0
-        sendBlocks.foreach( _ match {
-          case mpi3.Block(length, displacement) => {
-            require(
-              0 <= displacement && displacement + length <= sendBuff.valueCount,
-              mpi3.bufferCompatibilityErrorMsg)
-            sendcounts.set(idx, length)
-            displs.set(idx, displacement)
-            idx += 1
-          }
-        })
+        val recvcounts = buffer
+        val rdispls =
+          if (buffer != Pointer.NULL) buffer.next(recvBlocks.length)
+          else buffer
+        val sendcounts =
+          if (buffer != Pointer.NULL) buffer.next(2 * recvBlocks.length)
+          else buffer
+        val sdispls =
+          if (buffer != Pointer.NULL)
+            buffer.next(sendBlocks.length + 2 * recvBlocks.length)
+          else
+            buffer
+        fillBlockPars(recvBuff.valueCount, recvBlocks, recvcounts, rdispls)
+        fillBlockPars(sendBuff.valueCount, sendBlocks, sendcounts, sdispls)
         mpiCall(
-          mpi3.lib.MPI_Scatterv(
+          neighborAlltoallvFn(
             sendBuff.pointer,
             sendcounts,
-            displs,
+            sdispls,
             sendBuff.datatype.handle,
-            nullPointer[Byte],
-            0,
-            mpi3.lib.MPI_DATATYPE_NULL,
-            mpi3.lib.MPI_ROOT,
+            recvBuff.pointer,
+            recvcounts,
+            rdispls,
+            recvBuff.datatype.handle,
             handle))
-      } finally buffer.release()
-    }
-
-    // scatterv(), for non-root in sending group
-    def scattervOut() {
-      mpiCall(
-        mpi3.lib.MPI_Scatterv(
-          nullPointer[Byte],
-          nullPointer[Int],
-          nullPointer[Int],
-          mpi3.lib.MPI_DATATYPE_NULL,
-          nullPointer[Byte],
-          0,
-          mpi3.lib.MPI_DATATYPE_NULL,
-          mpi3.lib.MPI_PROC_NULL,
-          handle))
-    }
-
-    // scatterv(), for any rank in receiving group
-    def scattervIn(buff: mpi3.ValueBuffer[_], root: mpi3.GroupRank) {
-      require(root.group == remoteGroup, "scatter root not in remote group")
-      mpiCall(
-        mpi3.lib.MPI_Scatterv(
-          nullPointer[Byte],
-          nullPointer[Int],
-          nullPointer[Int],
-          mpi3.lib.MPI_DATATYPE_NULL,
-          buff.pointer,
-          buff.valueCount,
-          buff.datatype.handle,
-          root.rank,
-          handle))
-    }
-
-    // scatterv(), for any rank in either group
-    def scatterv(
-        sendBuff: mpi3.ValueBuffer[_],
-        sendBlocks: Seq[mpi3.Block],
-        recvBuff: mpi3.ValueBuffer[_],
-        root: mpi3.GroupRank) {
-      if (root.group == group) {
-        if (root.rank == rank) scattervOut(sendBuff, sendBlocks)
-        else scattervOut()
+      } finally {
+        if (buffer != Pointer.NULL) buffer.release()
       }
-      else scattervIn(recvBuff, root)
     }
 
-    // allgather()
-    def allgather(sendBuff: mpi3.ValueBuffer[_], recvBuff: mpi3.ValueBuffer[_]) {
-      allgather(sendBuff, recvBuff, recvBuff.valueCount / remoteSize)
+    def neighborAlltoallv(
+      sendBuff: mpi3.ValueBuffer[_],
+      sendBlocks: Seq[mpi3.Block],
+      recvBuff: mpi3.ValueBuffer[_],
+      recvBlocks: Seq[mpi3.Block]) {
+      callNeighborAlltoallv(
+        sendBuff,
+        sendBlocks,
+        recvBuff,
+        recvBlocks,
+        mpi3.lib.MPI_Neighbor_alltoallv)
     }
 
-    // allgatherv()
-    override def allgatherv(
-        sendBuff: mpi3.ValueBuffer[_],
-        recvBuff: mpi3.ValueBuffer[_],
-        recvBlocks: Seq[mpi3.Block]) {
-      require(recvBlocks.length == remoteSize, mpi3.gatherBufferSizeErrorMsg)
-      super.allgatherv(sendBuff, recvBuff, recvBlocks)
+    def ineighborAlltoallv(
+      sendBuff: mpi3.ValueBuffer[_],
+      sendBlocks: Seq[mpi3.Block],
+      recvBuff: mpi3.ValueBuffer[_],
+      recvBlocks: Seq[mpi3.Block]): mpi3.Request = {
+      val result = new mpi3.Request
+      callNeighborAlltoallv(
+        sendBuff,
+        sendBlocks,
+        recvBuff,
+        recvBlocks,
+        mpi3.lib.MPI_Ineighbor_alltoallv(
+          _, _, _, _, _, _, _, _, _, result.handlePtr))
+      result
     }
 
-    // alltoall()
-    override def alltoall(
-        sendBuff: mpi3.ValueBuffer[_],
-        sendCount: Int,
-        recvBuff: mpi3.ValueBuffer[_],
-        recvCount: Int) {
+    private def callNeighborAlltoallw(
+      sendBuff: mpi3.ValueBuffer[_],
+      sendStructs: Seq[mpi3.StructBlock[_]],
+      recvBuff: mpi3.ValueBuffer[_],
+      recvStructs: Seq[mpi3.StructBlock[_]],
+      neighborAlltoallwFn: (Pointer[_], Pointer[Int], Pointer[mpi3.lib.MPI_Aint],
+        Pointer[mpi3.lib.MPI_Datatype], Pointer[_],
+        Pointer[Int], Pointer[mpi3.lib.MPI_Aint], Pointer[mpi3.lib.MPI_Datatype],
+        mpi3.lib.MPI_Comm) => Int) {
+      require(sendStructs.length == outDegree, numBlocksUnequalToOutDegreeErrorMsg)
+      require(recvStructs.length == inDegree, numBlocksUnequalToInDegreeErrorMsg)
       require(
-        recvCount * remoteSize <= recvBuff.valueCount,
-        mpi3.gatherBufferSizeErrorMsg)
-      super.alltoall(sendBuff, sendCount, recvBuff, recvCount)
-    }
-
-    // alltoallv()
-    override def alltoallv(
-        sendBuff: mpi3.ValueBuffer[_],
-        sendBlocks: Seq[mpi3.Block],
-        recvBuff: mpi3.ValueBuffer[_],
-        recvBlocks: Seq[mpi3.Block]) {
-      require(recvBlocks.length == remoteSize, mpi3.gatherBufferSizeErrorMsg)
-      super.alltoallv(sendBuff, sendBlocks, recvBuff, recvBlocks)
-    }
-
-    // alltoallw()
-    override def alltoallw(
-        sendBuff: mpi3.ValueBuffer[_],
-        sendStructs: Seq[mpi3.StructBlock[_]],
-        recvBuff: mpi3.ValueBuffer[_],
-        recvStructs: Seq[mpi3.StructBlock[_]]) {
-      require(recvStructs.length == remoteSize, mpi3.gatherBufferSizeErrorMsg)
-      super.alltoallw(sendBuff, sendStructs, recvBuff, recvStructs)
-    }
-
-    // reduce(), for root (in receiving group)
-    def reduceIn(buff: mpi3.ValueBuffer[_], op: mpi3.Op) {
-      mpiCall(
-        mpi3.lib.MPI_Reduce(
-          nullPointer[Byte],
-          buff.pointer,
-          buff.valueCount,
-          buff.datatype.handle,
-          op.handle,
-          mpi3.lib.MPI_ROOT,
-          handle))
-    }
-
-    // reduce(), for non-root in receiving group
-    def reduceIn(op: mpi3.Op) {
-      mpiCall(
-        mpi3.lib.MPI_Reduce(
-          nullPointer[Byte],
-          nullPointer[Byte],
-          0,
-          mpi3.lib.MPI_DATATYPE_NULL,
-          op.handle,
-          mpi3.lib.MPI_PROC_NULL,
-          handle))
-    }
-
-    // reduce(), for any rank in sending group
-    def reduceOut(buff: mpi3.ValueBuffer[_], op: mpi3.Op, root: mpi3.GroupRank) {
-      require(root.group == remoteGroup, "reduce root not in remote group")
-      mpiCall(
-        mpi3.lib.MPI_Reduce(
-          buff.pointer,
-          nullPointer[Byte],
-          buff.valueCount,
-          buff.datatype.handle,
-          op.handle,
-          root.rank,
-          handle))
-    }
-
-    // reduce(), for any rank in either group
-    def reduce(
-        sendBuff: mpi3.ValueBuffer[_],
-        recvBuff: mpi3.ValueBuffer[_],
-        op: mpi3.Op,
-        root: mpi3.GroupRank) {
-      if (root.group == group) {
-        if (root.rank == rank) reduceIn(recvBuff, op)
-        else reduceIn(op)
+        StructBlock.displacementsAreValid(sendStructs),
+        mpi3.structBlocksAlignmentErrorMsg)
+      require(
+        StructBlock.displacementsAreValid(recvStructs),
+        mpi3.structBlocksAlignmentErrorMsg)
+      def fillStructPars(
+        buff: mpi3.ValueBuffer[_],
+        structs: Seq[mpi3.StructBlock[_]],
+        counts: Pointer[Int],
+        displs: Pointer[mpi3.lib.MPI_Aint],
+        types: Pointer[mpi3.lib.MPI_Datatype]) {
+        var idx = 0
+        structs foreach {
+          case mpi3.StructBlock(datatype, length, optDisp) => {
+            val displacement = optDisp.get
+            require(
+              0 <= displacement &&
+                displacement + length * datatype.extent.range <= buff.region.size,
+              mpi3.bufferCompatibilityErrorMsg)
+            counts(idx) = length
+            displs(idx) = displacement
+            types(idx) = datatype.handle
+            idx += 1
+          }
+        }
       }
-      else reduceOut(sendBuff, op, root)
+      val totalStructs = recvStructs.length + sendStructs.length
+      val counts = Pointer.allocateInts(totalStructs).as(classOf[Int])
+      val displs = mpi3.allocateAint(totalStructs)
+      val datatypes = mpi3.allocateDatatype(totalStructs)
+      try {
+        val recvcounts = counts
+        val sendcounts =
+          if (counts != Pointer.NULL) counts.next(2 * recvStructs.length)
+          else counts
+        val rdispls = displs
+        val sdispls =
+          if (displs != Pointer.NULL) displs.next(2 * recvStructs.length)
+          else displs
+        val recvtypes = datatypes
+        val sendtypes =
+          if (datatypes != Pointer.NULL) datatypes.next(2 * recvStructs.length)
+          else datatypes
+        fillStructPars(recvBuff, recvStructs, recvcounts, rdispls, recvtypes)
+        fillStructPars(sendBuff, sendStructs, sendcounts, sdispls, sendtypes)
+        mpiCall(
+          neighborAlltoallwFn(
+            sendBuff.pointer,
+            sendcounts,
+            sdispls,
+            sendtypes,
+            recvBuff.pointer,
+            recvcounts,
+            rdispls,
+            sendtypes,
+            handle))
+      } finally {
+        if (counts != Pointer.NULL) counts.release()
+        if (displs != Pointer.NULL) displs.release()
+        if (datatypes != Pointer.NULL) datatypes.release()
+      }
     }
 
-    // bcast(), for root (in sending group)
-    def bcastOut(buff: mpi3.ValueBuffer[_]) {
-      mpiCall(
-        mpi3.lib.MPI_Bcast(
-          buff.pointer,
-          buff.valueCount,
-          buff.datatype.handle,
-          mpi3.lib.MPI_ROOT,
-          handle))
+    def neighborAlltoallw(
+      sendBuff: mpi3.ValueBuffer[_],
+      sendStructs: Seq[mpi3.StructBlock[_]],
+      recvBuff: mpi3.ValueBuffer[_],
+      recvStructs: Seq[mpi3.StructBlock[_]]) {
+      callNeighborAlltoallw(
+        sendBuff,
+        sendStructs,
+        recvBuff,
+        recvStructs,
+        mpi3.lib.MPI_Neighbor_alltoallw)
     }
 
-    // bcast(), for non-root in sending group
-    def bcastOut() {
-      mpiCall(
-        mpi3.lib.MPI_Bcast(
-          nullPointer[Byte],
-          0,
-          mpi3.lib.MPI_DATATYPE_NULL,
-          mpi3.lib.MPI_PROC_NULL,
-          handle))
-    }
-
-    // bcast(), for any rank in receiving group
-    def bcastIn(buff: mpi3.ValueBuffer[_], root: mpi3.GroupRank) {
-      require(root.group == remoteGroup, "bcast root not in remote group")
-      mpiCall(
-        mpi3.lib.MPI_Bcast(
-          buff.pointer,
-          buff.valueCount,
-          buff.datatype.handle,
-          root.rank,
-          handle))
-    }
-
-    // bcast(), for any rank in either group
-    def bcast(buff: mpi3.ValueBuffer[_], root: mpi3.GroupRank) {
-      if (root.group == group) {
-        if (root.rank == rank) bcastOut(buff)
-        else bcastOut()
-      } else bcastIn(buff, root)
+    def ineighborAlltoallw(
+      sendBuff: mpi3.ValueBuffer[_],
+      sendStructs: Seq[mpi3.StructBlock[_]],
+      recvBuff: mpi3.ValueBuffer[_],
+      recvStructs: Seq[mpi3.StructBlock[_]]): mpi3.Request = {
+      val result = new mpi3.Request
+      callNeighborAlltoallw(
+        sendBuff,
+        sendStructs,
+        recvBuff,
+        recvStructs,
+        mpi3.lib.MPI_Ineighbor_alltoallw(
+          _, _, _, _, _, _, _, _, _, result.handlePtr))
+      result
     }
   }
 
-  final class CartComm protected[scampi3] () extends IntraComm {
+  final class CartComm protected[scampi3] ()
+      extends IntraComm
+      with Neighborhood {
 
     override def dup: CartComm = super.dup.asInstanceOf[CartComm]
 
@@ -2111,9 +3193,15 @@ trait CommComponent {
         }
       }
     }
+
+    protected lazy val inDegree = 2 * ndims
+
+    protected lazy val outDegree = 2 * ndims
   }
 
-  final class GraphComm protected[scampi3] () extends IntraComm {
+  final class GraphComm protected[scampi3] ()
+      extends IntraComm
+      with Neighborhood {
 
     override def dup: GraphComm = super.dup.asInstanceOf[GraphComm]
 
@@ -2175,10 +3263,18 @@ trait CommComponent {
       }
     }
 
-    lazy val neighbors: Seq[Int] = neighbors(rank)
+    protected lazy val inDegree = {
+      ((0 until size) map { r =>
+        neighbors(r).count(_ == rank)
+      }).sum
+    }
+
+    protected lazy val outDegree = neighbors(rank).length
   }
 
-  final class DistGraphComm protected[scampi3] () extends IntraComm {
+  final class DistGraphComm protected[scampi3] ()
+      extends IntraComm
+      with Neighborhood {
 
     override def dup: DistGraphComm = super.dup.asInstanceOf[DistGraphComm]
 
@@ -2245,6 +3341,10 @@ trait CommComponent {
         if (resultp != Pointer.NULL) resultp.release()
       }
     }
+
+    protected lazy val inDegree: Int = neighbors._1.length
+
+    protected lazy val outDegree: Int = neighbors._2.length
   }
 
   object Comm {
@@ -2279,7 +3379,7 @@ trait CommComponent {
               }
             result.handlePtr(0) = comm
             result.errHandler = CommErrHandler.Return
-            comms(comm) = WeakReference(result)
+              comms(comm) = WeakReference(result)
             result
           }
         } else {
@@ -2329,7 +3429,7 @@ trait CommComponent {
         extends mpi3.CacheKey(
       new mpi3.RestrictedAttributeKeyval[mpi3.Comm,Boolean]
           with mpi3.KeyvalBoolean,
-      mpi3.lib.MPI_WTIME_IS_GLOBAL)
+          mpi3.lib.MPI_WTIME_IS_GLOBAL)
 
     object HostKey extends mpi3.CacheKey(
       new mpi3.RestrictedAttributeKeyval[mpi3.Comm,Option[Int]] {

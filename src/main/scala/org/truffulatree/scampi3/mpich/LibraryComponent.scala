@@ -41,15 +41,25 @@ trait LibraryComponent
 
   def allocateRequest(n: Int = 1) = Pointer.allocateInts(n).as(classOf[Int])
 
+  def allocateMessage(n: Int = 1) = Pointer.allocateInts(n).as(classOf[Int])
+
   def allocateInfo(n: Int = 1) = Pointer.allocateInts(n).as(classOf[Int])
 
   def allocateAint(n: Int = 1) = Pointer.allocateCLongs(n)
 
   def allocateOffset(n: Int = 1) = Pointer.allocateLongs(n).as(classOf[Long])
 
+  def allocateCount(n: Int = 1) = Pointer.allocateLongs(n).as(classOf[Long])
+
   //def associateStatus(peer: Pointer[lib.MPI_Status]) = lib.MpiStatus(peer)
 
   def newStatus(n: Int = 1) = lib.MpiStatus(n)
+
+  def pointerToAint(v: lib.MPI_Aint) =
+    Pointer.pointerToCLong(v).as(classOf[lib.MPI_Aint])
+
+  def aintFromPointer(v: Pointer[_]): lib.MPI_Aint =
+    v.as(classOf[CLong])(0)
 
   protected def _aintToLong(aint: lib.MPI_Aint): Long = aint.longValue
 
@@ -59,10 +69,20 @@ trait LibraryComponent
 
   protected def _offsetFromLong(long: Long): lib.MPI_Offset = long
 
+  protected def _countToLong(offset: lib.MPI_Count): Long = offset
+
+  protected def _countFromLong(long: Long): lib.MPI_Count = long
+
   @Library("mpich")
   @Runtime(classOf[CRuntime])
   final object lib extends Mpi3Library {
     BridJ.register()
+
+    private lazy val nativeLibrary =
+      BridJ.getNativeLibrary(this.getClass)
+
+    private def getSymbolPointer(name: String): Pointer[_] =
+      nativeLibrary.getSymbolPointer(name)
 
     type MPI_Datatype = Int
     type MPI_Comm = Int
@@ -74,35 +94,39 @@ trait LibraryComponent
         extends StructObject(peer) with CStatus {
       val sizeOf = typeInfo.sizeOf
       @Field(0)
-      def count = io.getIntField(this, 0)
+      def MPI_SOURCE: Int = io.getIntField(this, 0)
       @Field(0)
-      def count_=(x: Int) {
+      def MPI_SOURCE_=(x: Int) {
 	io.setIntField(this, 0, x)
       }
       @Field(1)
-      def cancelled = io.getIntField(this, 1)
+      def MPI_TAG: Int = io.getIntField(this, 1)
       @Field(1)
-      def cancelled_=(x: Int) {
+      def MPI_TAG_=(x: Int) {
 	io.setIntField(this, 1, x)
       }
       @Field(2)
-      def MPI_SOURCE: Int = io.getIntField(this, 2)
+      def MPI_ERROR: Int = io.getIntField(this, 2)
       @Field(2)
-      def MPI_SOURCE_=(x: Int) {
+      def MPI_ERROR_=(x: Int) {
 	io.setIntField(this, 2, x)
       }
       @Field(3)
-      def MPI_TAG: Int = io.getIntField(this, 3)
+      def count = io.getLongField(this, 3)
       @Field(3)
-      def MPI_TAG_=(x: Int) {
-	io.setIntField(this, 3, x)
+      def count_=(x: Int) {
+	io.setLongField(this, 3, x)
       }
       @Field(4)
-      def MPI_ERROR: Int = io.getIntField(this, 4)
+      def cancelled = io.getIntField(this, 4)
       @Field(4)
-      def MPI_ERROR_=(x: Int) {
+      def cancelled_=(x: Int) {
 	io.setIntField(this, 4, x)
       }
+      @Field(5)
+      def abi_slush_fund0 = io.getIntField(this, 5)
+      @Field(6)
+      def abi_slush_fund1 = io.getIntField(this, 6)
       override def toString =
         s"""|MPI_Status(${count},${cancelled},${MPI_SOURCE},
             |${MPI_TAG},${MPI_ERROR})""".stripMargin
@@ -117,6 +141,7 @@ trait LibraryComponent
       val sizeOf = (new MPI_Status(MPI_STATUS_IGNORE)).sizeOf
     }
     type MPI_Request = Int
+    type MPI_Message = Int
     type MPI_Errhandler = Int
     type MPI_Info = Int
     type MPI_Aint = CLong
@@ -147,8 +172,6 @@ trait LibraryComponent
     val MPI_UNSIGNED_LONG_LONG = 0x4c000819
     val MPI_LONG_LONG = MPI_LONG_LONG_INT
     val MPI_PACKED = 0x4c00010f
-    val MPI_LB = 0x4c000010
-    val MPI_UB = 0x4c000011
     val MPI_FLOAT_INT = 0x8c000000
     val MPI_DOUBLE_INT = 0x8c000001
     val MPI_LONG_INT = 0x8c000002
@@ -170,6 +193,7 @@ trait LibraryComponent
     val MPI_C_LONG_DOUBLE_COMPLEX = 0x4c002042
     val MPI_AINT = 0x4c000843
     val MPI_OFFSET = 0x4c000844
+    val MPI_COUNT = 0x4c000845
 
     val MPI_COMM_WORLD = 0x44000000
     val MPI_COMM_SELF = 0x44000001
@@ -179,6 +203,8 @@ trait LibraryComponent
     val MPI_WIN_NULL = 0x20000000
 
     val MPI_FILE_NULL = Pointer.NULL.asInstanceOf[MPI_File]
+
+    val MPI_COMM_TYPE_SHARED = 1
 
     val MPI_MAX = 0x58000001
     val MPI_MIN = 0x58000002
@@ -193,6 +219,7 @@ trait LibraryComponent
     val MPI_MINLOC = 0x5800000b
     val MPI_MAXLOC = 0x5800000c
     val MPI_REPLACE = 0x5800000d
+    val MPI_NO_OP = 0x5800000e
 
     val MPI_TAG_UB = 0x64400001
     val MPI_HOST = 0x64400003
@@ -204,6 +231,16 @@ trait LibraryComponent
     val MPI_WIN_BASE = 0x66000001
     val MPI_WIN_SIZE = 0x66000003
     val MPI_WIN_DISP_UNIT = 0x66000005
+    val MPI_WIN_CREATE_FLAVOR = 0x66000007
+    val MPI_WIN_MODEL = 0x66000009
+
+    val MPI_WIN_FLAVOR_CREATE = 1
+    val MPI_WIN_FLAVOR_ALLOCATE = 2
+    val MPI_WIN_FLAVOR_DYNAMIC = 3
+    val MPI_WIN_FLAVOR_SHARED = 4
+
+    val MPI_WIN_SEPARATE = 1
+    val MPI_WIN_UNIFIED = 2
 
     val MPI_COMM_NULL = 0x04000000
     val MPI_OP_NULL = 0x18000000
@@ -211,18 +248,25 @@ trait LibraryComponent
     val MPI_DATATYPE_NULL = 0x0c000000
     val MPI_REQUEST_NULL = 0x2c000000
     val MPI_ERRHANDLER_NULL = 0x14000000
+    val MPI_MESSAGE_NULL = MPI_REQUEST_NULL
+    val MPI_MESSAGE_NO_PROC = 0x6c000000
 
     val MPI_MAX_DATAREP_STRING = 128
     val MPI_MAX_PROCESSOR_NAME = 128
     val MPI_MAX_ERROR_STRING = 1024
     val MPI_MAX_PORT_NAME = 256
     val MPI_MAX_OBJECT_NAME = 128
+    val MPI_MAX_LIBRARY_VERSION_STRING = 8192
+
     val MPI_UNDEFINED = -32766
     val MPI_KEYVAL_INVALID = 0x24000000
-    val MPI_BSEND_OVERHEAD = 88
+    val MPI_BSEND_OVERHEAD = 96
 
     val MPI_BOTTOM = Pointer.pointerToAddress(0, classOf[Byte], noRelease)
-    val MPI_UNWEIGHTED = Pointer.pointerToAddress(0, classOf[Int], noRelease)
+    lazy val MPI_UNWEIGHTED =
+      getSymbolPointer("MPI_UNWEIGHTED").as(classOf[Int])
+    lazy val MPI_WEIGHTS_EMPTY =
+      getSymbolPointer("MPI_WEIGHTS_EMPTY").as(classOf[Int])
 
     val MPI_PROC_NULL = -1
     val MPI_ANY_SOURCE = -2
@@ -236,6 +280,7 @@ trait LibraryComponent
     val MPI_ERRORS_RETURN = 0x54000001
 
     val MPI_INFO_NULL = 0x1c000000
+    val MPI_INFO_ENV = 0x5c000001
     val MPI_MAX_INFO_KEY = 255
     val MPI_MAX_INFO_VAL = 1024
 
@@ -248,20 +293,21 @@ trait LibraryComponent
 
     val MPI_IN_PLACE = Pointer.pointerToAddress(-1, classOf[Byte], noRelease)
 
-    val MPI_MODE_APPEND = 128
+    val MPI_MODE_RDONLY = 2
+    val MPI_MODE_RDWR = 8
+    val MPI_MODE_WRONLY = 4
     val MPI_MODE_CREATE = 1
-    val MPI_MODE_DELETE_ON_CLOSE = 16
     val MPI_MODE_EXCL = 64
+    val MPI_MODE_DELETE_ON_CLOSE = 16
+    val MPI_MODE_UNIQUE_OPEN = 32
+    val MPI_MODE_APPEND = 128
+    val MPI_MODE_SEQUENTIAL = 256
+
     val MPI_MODE_NOCHECK = 1024
     val MPI_MODE_NOSTORE = 2048
     val MPI_MODE_NOPUT = 4096
     val MPI_MODE_NOPRECEDE = 8192
     val MPI_MODE_NOSUCCEED = 16384
-    val MPI_MODE_RDONLY = 2
-    val MPI_MODE_RDWR = 8
-    val MPI_MODE_SEQUENTIAL = 256
-    val MPI_MODE_UNIQUE_OPEN = 32
-    val MPI_MODE_WRONLY = 4
 
     val MPI_DISPLACEMENT_CURRENT = -54278278L
 
@@ -298,13 +344,14 @@ trait LibraryComponent
     val MPI_COMBINER_INDEXED = 7
     val MPI_COMBINER_HINDEXED = 9
     val MPI_COMBINER_INDEXED_BLOCK = 10
-    val MPI_COMBINER_STRUCT = 12
-    val MPI_COMBINER_SUBARRAY = 13
-    val MPI_COMBINER_DARRAY = 14
-    val MPI_COMBINER_F90_REAL = 15
-    val MPI_COMBINER_F90_COMPLEX = 16
-    val MPI_COMBINER_F90_INTEGER = 17
-    val MPI_COMBINER_RESIZED = 18
+    val MPI_COMBINER_HINDEXED_BLOCK = 11
+    val MPI_COMBINER_STRUCT = 13
+    val MPI_COMBINER_SUBARRAY = 14
+    val MPI_COMBINER_DARRAY = 15
+    val MPI_COMBINER_F90_REAL = 16
+    val MPI_COMBINER_F90_COMPLEX = 17
+    val MPI_COMBINER_F90_INTEGER = 18
+    val MPI_COMBINER_RESIZED = 19
 
     val MPI_SUCCESS = 0
     val MPI_ERR_BUFFER = 1
@@ -360,6 +407,11 @@ trait LibraryComponent
     val MPI_ERR_SIZE = 51
     val MPI_ERR_DISP = 52
     val MPI_ERR_ASSERT = 53
+    val MPIX_ERR_PROC_FAIL_STOP = 54
+    val MPI_ERR_RMA_RANGE = 55
+    val MPI_ERR_RMA_ATTACH = 56
+    val MPI_ERR_RMA_SHARED = 57
+    val MPI_ERR_RMA_FLAVOR = 58
     val MPI_ERR_LASTCODE = 0x3fffffff
 
     type MPI_Comm_copy_attr_function = Callbacks.MPI_Comm_copy_attr_function
@@ -597,6 +649,11 @@ trait LibraryComponent
       datatype: MPI_Datatype, count: Pointer[Int]): Int
     @native def MPI_Ibsend(buf: Pointer[_], count: Int, datatype: MPI_Datatype,
       dest: Int, tag: Int, comm: MPI_Comm, request: Pointer[MPI_Request]): Int
+    @native def MPI_Improbe(source: Int, tag: Int, comm: MPI_Comm,
+      flag: Pointer[Int], message: Pointer[MPI_Message],
+      status: Pointer[MPI_Status]): Int
+    @native def MPI_Imrecv(buf: Pointer[_], count: Int, datatype: MPI_Datatype,
+      message: Pointer[MPI_Message], request: Pointer[MPI_Request]): Int
     @native def MPI_Iprobe(source: Int, tag: Int, comm: MPI_Comm,
       flag: Pointer[Int], status: Pointer[MPI_Status]): Int
     @native def MPI_Irecv(buf: Pointer[_], count: Int, datatype: MPI_Datatype,
@@ -607,6 +664,10 @@ trait LibraryComponent
       dest: Int, tag: Int, comm: MPI_Comm, request: Pointer[MPI_Request]): Int
     @native def MPI_Issend(buf: Pointer[_], count: Int, datatype: MPI_Datatype,
       dest: Int, tag: Int, comm: MPI_Comm, request: Pointer[MPI_Request]): Int
+    @native def MPI_Mprobe(source: Int, tag: Int, comm: MPI_Comm,
+      message: Pointer[MPI_Message], status: Pointer[MPI_Status]): Int
+    @native def MPI_Mrecv(buf: Pointer[_], count: Int, datatype: MPI_Datatype,
+      message: Pointer[MPI_Message], status: Pointer[MPI_Status]): Int
     @native def MPI_Probe(source: Int, tag: Int, comm: MPI_Comm,
       status: Pointer[MPI_Status]): Int
     @native def MPI_Recv(buf: Pointer[_], count: Int, datatype: MPI_Datatype,
@@ -671,6 +732,8 @@ trait LibraryComponent
       address: Pointer[MPI_Aint]): Int
     @native def MPI_Get_elements(status: Pointer[MPI_Status],
       datatype: MPI_Datatype, count: Pointer[Int]): Int
+    @native def MPI_Get_elements_x(status: Pointer[MPI_Status],
+      datatype: MPI_Datatype, count: Pointer[MPI_Count]): Int
     @native def MPI_Pack(inbuf: Pointer[_], incount: Int,
       datatype: MPI_Datatype, outbuf: Pointer[_], outsize: Int,
       position: Pointer[Int], comm: MPI_Comm): Int
@@ -690,6 +753,9 @@ trait LibraryComponent
       oldtype: MPI_Datatype, newtype: Pointer[MPI_Datatype]): Int
     @native def MPI_Type_create_hindexed(count: Int,
       array_of_blocklengths: Pointer[Int],
+      array_of_displacements: Pointer[MPI_Aint], oldtype: MPI_Datatype,
+      newtype: Pointer[MPI_Datatype]): Int
+    @native def MPI_Type_create_hindexed_block(count: Int, blocklength: Int,
       array_of_displacements: Pointer[MPI_Aint], oldtype: MPI_Datatype,
       newtype: Pointer[MPI_Datatype]): Int
     @native def MPI_Type_create_hvector(count: Int, blocklength: Int,
@@ -721,12 +787,18 @@ trait LibraryComponent
       num_datatypes: Pointer[Int], combiner: Pointer[Int]): Int
     @native def MPI_Type_get_extent(datatype: MPI_Datatype,
       lb: Pointer[MPI_Aint], extent: Pointer[MPI_Aint]): Int
+    @native def MPI_Type_get_extent_x(datatype: MPI_Datatype,
+      lb: Pointer[MPI_Count], extent: Pointer[MPI_Count]): Int
     @native def MPI_Type_get_true_extent(datatype: MPI_Datatype,
       true_lb: Pointer[MPI_Aint], true_extent: Pointer[MPI_Aint]): Int
+    @native def MPI_Type_get_true_extent_x(datatype: MPI_Datatype,
+      true_lb: Pointer[MPI_Count], true_extent: Pointer[MPI_Count]): Int
     @native def MPI_Type_indexed(count: Int,
       array_of_blocklengths: Pointer[Int], array_of_displacements: Pointer[Int],
       oldtype: MPI_Datatype, newtype: Pointer[MPI_Datatype]): Int
     @native def MPI_Type_size(datatype: MPI_Datatype, size: Pointer[Int]): Int
+    @native def MPI_Type_size_x(datatype: MPI_Datatype,
+      size: Pointer[MPI_Count]): Int
     @native def MPI_Type_vector(count: Int, blocklength: Int, stride: Int,
       oldtype: MPI_Datatype, newtype: Pointer[MPI_Datatype]): Int
     @native def MPI_Unpack(inbuf: Pointer[_], insize: Int,
@@ -769,6 +841,60 @@ trait LibraryComponent
       sendtype: MPI_Datatype, recvbuf: Pointer[_], recvcounts: Pointer[Int],
       displs: Pointer[Int], recvtype: MPI_Datatype, root: Int,
       comm: MPI_Comm): Int
+    @native def MPI_Iallgather(sendbuf: Pointer[_], sendcount: Int,
+      sendtype: MPI_Datatype, recvbuf: Pointer[_], recvcount: Int,
+      recvtype: MPI_Datatype, comm: MPI_Comm, request: Pointer[MPI_Request]): Int
+    @native def MPI_Iallgatherv(sendbuf: Pointer[_], sendcount: Int,
+      sendtype: MPI_Datatype, recvbuf: Pointer[_], recvcounts: Pointer[Int],
+      displs: Pointer[Int], recvtype: MPI_Datatype, comm: MPI_Comm,
+      request: Pointer[MPI_Request]): Int
+    @native def MPI_Iallreduce(sendbuf: Pointer[_], recvbuf: Pointer[_],
+      count: Int, datatype: MPI_Datatype, op: MPI_Op, comm: MPI_Comm,
+      request: Pointer[MPI_Request]): Int
+    @native def MPI_Ialltoall(sendbuf: Pointer[_], sendcount: Int,
+      sendtype: MPI_Datatype, recvbuf: Pointer[_], recvcount: Int,
+      recvtype: MPI_Datatype, comm: MPI_Comm, request: Pointer[MPI_Request]): Int
+    @native def MPI_Ialltoallv(sendbuf: Pointer[_], sendcounts: Pointer[Int],
+      sdispls: Pointer[Int], sendtype: MPI_Datatype, recvbuf: Pointer[_],
+      recvcounts: Pointer[Int], rdispls: Pointer[Int], recvtype: MPI_Datatype,
+      comm: MPI_Comm, request: Pointer[MPI_Request]): Int
+    @native def MPI_Ialltoallw(sendbuf: Pointer[_], sendcounts: Pointer[Int],
+      sdispls: Pointer[Int], sendtypes: Pointer[MPI_Datatype],
+      recvbuf: Pointer[_], recvcounts: Pointer[Int], rdispls: Pointer[Int],
+      recvtypes: Pointer[MPI_Datatype], comm: MPI_Comm,
+      request: Pointer[MPI_Request]): Int
+    @native def MPI_Ibarrier(comm: MPI_Comm, request: Pointer[MPI_Request]): Int
+    @native def MPI_Ibcast(buffer: Pointer[_], count: Int, datatype: MPI_Datatype,
+      root: Int, comm: MPI_Comm, request: Pointer[MPI_Request]): Int
+    @native def MPI_Iexscan(sendbuf: Pointer[_], recvbuf: Pointer[_], count: Int,
+      datatype: MPI_Datatype, op: MPI_Op, comm: MPI_Comm,
+      request: Pointer[MPI_Request]): Int
+    @native def MPI_Igather(sendbuf: Pointer[_], sendcount: Int, sendtype: MPI_Datatype,
+      recvbuf: Pointer[_], recvcount: Int, recvtype: MPI_Datatype, root: Int,
+      comm: MPI_Comm, request: Pointer[MPI_Request]): Int
+    @native def MPI_Igatherv(sendbuf: Pointer[_], sendcount: Int, sendtype: MPI_Datatype,
+      recvbuf: Pointer[_], recvcounts: Pointer[Int], displs: Pointer[Int],
+      recvtype: MPI_Datatype, root: Int, comm: MPI_Comm,
+      request: Pointer[MPI_Request]): Int
+    @native def MPI_Ireduce(sendbuf: Pointer[_], recvbuf: Pointer[_], count: Int,
+      datatype: MPI_Datatype, op: MPI_Op, root: Int, comm: MPI_Comm,
+      request: Pointer[MPI_Request]): Int
+    @native def MPI_Ireduce_scatter(sendbuf: Pointer[_], recvbuf: Pointer[_],
+      recvcounts: Pointer[Int], datatype: MPI_Datatype, op: MPI_Op,
+      comm: MPI_Comm, request: Pointer[MPI_Request]): Int
+    @native def MPI_Ireduce_scatter_block(sendbuf: Pointer[_], recvbuf: Pointer[_],
+      recvcount: Int, datatype: MPI_Datatype, op: MPI_Op, comm: MPI_Comm,
+      request: Pointer[MPI_Request]): Int
+    @native def MPI_Iscan(sendbuf: Pointer[_], recvbuf: Pointer[_], count: Int,
+      datatype: MPI_Datatype, op: MPI_Op, comm: MPI_Comm,
+      request: Pointer[MPI_Request]): Int
+    @native def MPI_Iscatter(sendbuf: Pointer[_], sendcount: Int, sendtype: MPI_Datatype,
+      recvbuf: Pointer[_], recvcount: Int, recvtype: MPI_Datatype, root: Int,
+      comm: MPI_Comm, request: Pointer[MPI_Request]): Int
+    @native def MPI_Iscatterv(sendbuf: Pointer[_], sendcounts: Pointer[Int],
+      displs: Pointer[Int], sendtype: MPI_Datatype, recvbuf: Pointer[_],
+      recvcount: Int, recvtype: MPI_Datatype, root: Int, comm: MPI_Comm,
+      request: Pointer[MPI_Request]): Int
     @native def MPI_Op_commutative(op: MPI_Op, commute: Pointer[Int]): Int
     @native def MPI_Op_create(function: Pointer[MPI_User_function],
       commute: Int, op: Pointer[MPI_Op]): Int
@@ -780,9 +906,8 @@ trait LibraryComponent
     @native def MPI_Reduce_scatter(sendbuf: Pointer[_], recvbuf: Pointer[_],
       recvcounts: Pointer[Int], datatype: MPI_Datatype, op: MPI_Op,
       comm: MPI_Comm): Int
-    @native def MPI_Reduce_scatter_block(sendbuf: Pointer[_],
-      recvbuf: Pointer[_], recvcount: Int, datatype: MPI_Datatype, op: MPI_Op,
-      comm: MPI_Comm): Int
+    @native def MPI_Reduce_scatter_block(sendbuf: Pointer[_], recvbuf: Pointer[_],
+      recvcount: Int, datatype: MPI_Datatype, op: MPI_Op, comm: MPI_Comm): Int
     @native def MPI_Scan(sendbuf: Pointer[_], recvbuf: Pointer[_], count: Int,
       datatype: MPI_Datatype, op: MPI_Op, comm: MPI_Comm): Int
     @native def MPI_Scatter(sendbuf: Pointer[_], sendcount: Int,
@@ -798,29 +923,40 @@ trait LibraryComponent
       result: Pointer[Int]): Int
     @native def MPI_Comm_create(comm: MPI_Comm, group: MPI_Group,
       newcomm: Pointer[MPI_Comm]): Int
+    @native def MPI_Comm_create_group(comm: MPI_Comm, group: MPI_Group, tag: Int,
+      newcomm: Pointer[MPI_Comm]): Int
     @native def MPI_Comm_create_keyval(
       comm_copy_attr_fn: Pointer[MPI_Comm_copy_attr_function],
       comm_delete_attr_fn: Pointer[MPI_Comm_delete_attr_function],
       comm_keyval: Pointer[Int], extra_state: Pointer[_]): Int
     @native def MPI_Comm_delete_attr(comm: MPI_Comm, comm_keyval: Int): Int
     @native def MPI_Comm_dup(comm: MPI_Comm, newcomm: Pointer[MPI_Comm]): Int
+    @native def MPI_Comm_dup_with_info(comm: MPI_Comm, info: MPI_Info,
+      newcomm: Pointer[MPI_Comm]): Int
     @native def MPI_Comm_free(comm: Pointer[MPI_Comm]): Int
     @native def MPI_Comm_free_keyval(comm_keyval: Pointer[Int]): Int
     @native def MPI_Comm_get_attr(comm: MPI_Comm, comm_keyval: Int,
       attribute_val: Pointer[Pointer[_]], flag: Pointer[Int]): Int
+    @native def MPI_Comm_get_info(comm: MPI_Comm,
+      info_used: Pointer[MPI_Info]): Int
     @native def MPI_Comm_get_name(comm: MPI_Comm, comm_name: Pointer[Byte],
       resultlen: Pointer[Int]): Int
     @native def MPI_Comm_group(comm: MPI_Comm, group: Pointer[MPI_Group]): Int
+    @native def MPI_Comm_idup(comm: MPI_Comm, newcomm: Pointer[MPI_Comm],
+      request: Pointer[MPI_Request]): Int
     @native def MPI_Comm_rank(comm: MPI_Comm, rank: Pointer[Int]): Int
     @native def MPI_Comm_remote_group(comm: MPI_Comm,
       group: Pointer[MPI_Group]): Int
     @native def MPI_Comm_remote_size(comm: MPI_Comm, size: Pointer[Int]): Int
     @native def MPI_Comm_set_attr(comm: MPI_Comm, comm_keyval: Int,
       attribute_val: Pointer[_]): Int
+    @native def MPI_Comm_set_info(comm: MPI_Comm, info: MPI_Info): Int
     @native def MPI_Comm_set_name(comm: MPI_Comm, comm_name: Pointer[Byte]): Int
     @native def MPI_Comm_size(comm: MPI_Comm, size: Pointer[Int]): Int
     @native def MPI_Comm_split(comm: MPI_Comm, color: Int, key: Int,
       newcomm: Pointer[MPI_Comm]): Int
+    @native def MPI_Comm_split_type(comm: MPI_Comm, split_type: Int, key: Int,
+      info: MPI_Info, newcomm: Pointer[MPI_Comm]): Int
     @native def MPI_Comm_test_inter(comm: MPI_Comm, flag: Pointer[Int]): Int
     @native def MPI_Group_compare(group1: MPI_Group, group2: MPI_Group,
       result: Pointer[Int]): Int
@@ -925,6 +1061,44 @@ trait LibraryComponent
       nneighbors: Pointer[Int]): Int
     @native def MPI_Graphdims_get(comm: MPI_Comm, nnodes: Pointer[Int],
       nedges: Pointer[Int]): Int
+    @native def MPI_Ineighbor_allgather(sendbuf: Pointer[_], sendcount: Int,
+      sendtype: MPI_Datatype, recvbuf: Pointer[_], recvcount: Int,
+      recvtype: MPI_Datatype, comm: MPI_Comm, request: Pointer[MPI_Request]): Int
+    @native def MPI_Ineighbor_allgatherv(sendbuf: Pointer[_], sendcount: Int,
+      sendtype: MPI_Datatype, recvbuf: Pointer[_], recvcounts: Pointer[Int],
+      displs: Pointer[Int], recvtype: MPI_Datatype, comm: MPI_Comm,
+      request: Pointer[MPI_Request]): Int
+    @native def MPI_Ineighbor_alltoall(sendbuf: Pointer[_], sendcount: Int,
+      sendtype: MPI_Datatype, recvbuf: Pointer[_], recvcount: Int,
+      recvtype: MPI_Datatype, comm: MPI_Comm, request: Pointer[MPI_Request]): Int
+    @native def MPI_Ineighbor_alltoallv(sendbuf: Pointer[_],
+      sendcounts: Pointer[Int], sdispls: Pointer[Int], sendtype: MPI_Datatype,
+      recvbuf: Pointer[_], recvcounts: Pointer[Int], rdispls: Pointer[Int],
+      recvtype: MPI_Datatype, comm: MPI_Comm, request: Pointer[MPI_Request]): Int
+    @native def MPI_Ineighbor_alltoallw(sendbuf: Pointer[_],
+      sendcounts: Pointer[Int], sdispls: Pointer[MPI_Aint],
+      sendtypes: Pointer[MPI_Datatype], recvbuf: Pointer[_],
+      recvcounts: Pointer[Int], rdispls: Pointer[MPI_Aint],
+      recvtypes: Pointer[MPI_Datatype], comm: MPI_Comm,
+      request: Pointer[MPI_Request]): Int
+    @native def MPI_Neighbor_allgather(sendbuf: Pointer[_], sendcount: Int,
+      sendtype: MPI_Datatype, recvbuf: Pointer[_], recvcount: Int,
+      recvtype: MPI_Datatype, comm: MPI_Comm): Int
+    @native def MPI_Neighbor_allgatherv(sendbuf: Pointer[_], sendcount: Int,
+      sendtype: MPI_Datatype, recvbuf: Pointer[_], recvcounts: Pointer[Int],
+      displs: Pointer[Int], recvtype: MPI_Datatype, comm: MPI_Comm): Int
+    @native def MPI_Neighbor_alltoall(sendbuf: Pointer[_], sendcount: Int,
+      sendtype: MPI_Datatype, recvbuf: Pointer[_], recvcount: Int,
+      recvtype: MPI_Datatype, comm: MPI_Comm): Int
+    @native def MPI_Neighbor_alltoallv(sendbuf: Pointer[_],
+      sendcounts: Pointer[Int], sdispls: Pointer[Int], sendtype: MPI_Datatype,
+      recvbuf: Pointer[_], recvcounts: Pointer[Int], rdispls: Pointer[Int],
+      recvtype: MPI_Datatype, comm: MPI_Comm): Int
+    @native def MPI_Neighbor_alltoallw(sendbuf: Pointer[_],
+      sendcounts: Pointer[Int], sdispls: Pointer[MPI_Aint],
+      sendtypes: Pointer[MPI_Datatype], recvbuf: Pointer[_],
+      recvcounts: Pointer[Int], rdispls: Pointer[MPI_Aint],
+      recvtypes: Pointer[MPI_Datatype], comm: MPI_Comm): Int
     @native def MPI_Topo_test(comm: MPI_Comm, status: Pointer[Int]): Int
 
     // A.2.6 MPI Environmenta Management C Bindings
@@ -963,6 +1137,8 @@ trait LibraryComponent
       resultlen: Pointer[Int]): Int
     @native def MPI_Get_version(version: Pointer[Int],
       subversion: Pointer[Int]): Int
+    @native def MPI_Get_library_version(version: Pointer[Byte],
+      resultlen: Pointer[Int]): Int
     @native def MPI_Init(argc: Pointer[Int],
       argv: Pointer[Pointer[Pointer[Byte]]]): Int
     @native def MPI_Initialized(flag: Pointer[Int]): Int
@@ -1027,24 +1203,72 @@ trait LibraryComponent
       origin_datatype: MPI_Datatype, target_rank: Int, target_disp: MPI_Aint,
       target_count: Int, target_datatype: MPI_Datatype, op: MPI_Op,
       win: MPI_Win): Int
+    @native def MPI_Compare_and_swap(origin_addr: Pointer[_],
+      compare_addr: Pointer[_], result_addr: Pointer[_], datatype: MPI_Datatype,
+      target_rank: Int, target_disp: MPI_Aint, win: MPI_Win): Int
+    @native def MPI_Fetch_and_op(origin_addr: Pointer[_], result_addr: Pointer[_],
+      datatype: MPI_Datatype, target_rank: Int, target_disp: MPI_Aint,
+      op: MPI_Op, win: MPI_Win): Int
     @native def MPI_Get(origin_addr: Pointer[_], origin_count: Int,
       origin_datatype: MPI_Datatype, target_rank: Int, target_disp: MPI_Aint,
       target_count: Int, target_datatype: MPI_Datatype, win: MPI_Win): Int
+    @native def MPI_Get_accumulate(origin_addr: Pointer[_], origin_count: Int,
+      origin_datatype: MPI_Datatype, result_addr: Pointer[_], result_count: Int,
+      result_datatype: MPI_Datatype, target_rank: Int, target_disp: MPI_Aint,
+      target_count: Int, target_datatype: MPI_Datatype, op: MPI_Op,
+      win: MPI_Win): Int
     @native def MPI_Put(origin_addr: Pointer[_], origin_count: Int,
       origin_datatype: MPI_Datatype, target_rank: Int, target_disp: MPI_Aint,
       target_count: Int, target_datatype: MPI_Datatype, win: MPI_Win): Int
+    @native def MPI_Raccumulate(origin_addr: Pointer[_], origin_count: Int,
+      origin_datatype: MPI_Datatype, target_rank: Int, target_disp: MPI_Aint,
+      target_count: Int, target_datatype: MPI_Datatype, op: MPI_Op, win: MPI_Win,
+      request: Pointer[MPI_Request]): Int
+    @native def MPI_Rget(origin_addr: Pointer[_], origin_count: Int,
+      origin_datatype: MPI_Datatype, target_rank: Int, target_disp: MPI_Aint,
+      target_count: Int, target_datatype: MPI_Datatype, win: MPI_Win,
+      request: Pointer[MPI_Request]): Int
+    @native def MPI_Rget_accumulate(origin_addr: Pointer[_], origin_count: Int,
+      origin_datatype: MPI_Datatype, result_addr: Pointer[_], result_count: Int,
+      result_datatype: MPI_Datatype, target_rank: Int, target_disp: MPI_Aint,
+      target_count: Int, target_datatype: MPI_Datatype, op: MPI_Op, win: MPI_Win,
+      request: Pointer[MPI_Request]): Int
+    @native def MPI_Rput(origin_addr: Pointer[_], origin_count: Int,
+      origin_datatype: MPI_Datatype, target_rank: Int, target_disp: MPI_Aint,
+      target_count: Int, target_datatype: MPI_Datatype, win: MPI_Win,
+      request: Pointer[MPI_Request]): Int
+    @native def MPI_Win_allocate(size: MPI_Aint, disp_unit: Int, info:  MPI_Info,
+      comm: MPI_Comm, baseptr: Pointer[_], win: Pointer[MPI_Win]): Int
+    @native def MPI_Win_allocate_shared(size: MPI_Aint, disp_unit: Int,
+      info: MPI_Info, comm: MPI_Comm, baseptr: Pointer[_],
+      win: Pointer[MPI_Win]): Int
+    @native def MPI_Win_attach(win: MPI_Win, base: Pointer[_], size: MPI_Aint): Int
     @native def MPI_Win_complete(win: MPI_Win): Int
     @native def MPI_Win_create(base: Pointer[_], size: MPI_Aint, disp_unit: Int,
       info: MPI_Info, comm: MPI_Comm, win: Pointer[MPI_Win]): Int
+    @native def MPI_Win_create_dynamic(info: MPI_Info, comm: MPI_Comm,
+      win: Pointer[MPI_Win]): Int
+    @native def MPI_Win_detach(win: MPI_Win, base: Pointer[_]): Int
     @native def MPI_Win_fence(assert: Int, win: MPI_Win): Int
+    @native def MPI_Win_flush(rank: Int, win: MPI_Win): Int
+    @native def MPI_Win_flush_all(win: MPI_Win): Int
+    @native def MPI_Win_flush_local(rank: Int, win: MPI_Win): Int
+    @native def MPI_Win_flush_local_all(win: MPI_Win): Int
     @native def MPI_Win_free(win: Pointer[MPI_Win]): Int
     @native def MPI_Win_get_group(win: MPI_Win, group: Pointer[MPI_Group]): Int
+    @native def MPI_Win_get_info(win: MPI_Win, info_used: Pointer[MPI_Info]): Int
     @native def MPI_Win_lock(lock_type: Int, rank: Int, assert: Int,
       win: MPI_Win): Int
+    @native def MPI_Win_lock_all(assert: Int, win: MPI_Win): Int
     @native def MPI_Win_post(group: MPI_Group, assert: Int, win: MPI_Win): Int
+    @native def MPI_Win_set_info(win: MPI_Win, info: MPI_Info): Int
+    @native def MPI_Win_shared_query(win: MPI_Win, rank: Int,
+      size: Pointer[MPI_Aint], disp_unit: Pointer[Int], baseptr: Pointer[_]): Int
     @native def MPI_Win_start(group: MPI_Group, assert: Int, win: MPI_Win): Int
+    @native def MPI_Win_sync(win: MPI_Win): Int
     @native def MPI_Win_test(win: MPI_Win, flag: Pointer[Int]): Int
     @native def MPI_Win_unlock(rank: Int, win: MPI_Win): Int
+    @native def MPI_Win_unlock_all(win: MPI_Win): Int
     @native def MPI_Win_wait(win: MPI_Win): Int
 
     // A.2.10 External Interfaces C Bindings
@@ -1064,6 +1288,8 @@ trait LibraryComponent
       flag: Int): Int
     @native def MPI_Status_set_elements(status: Pointer[MPI_Status],
       datatype: MPI_Datatype, count: Int): Int
+    @native def MPI_Status_set_elements_x(status: Pointer[MPI_Status],
+      datatype: MPI_Datatype, count: MPI_Count): Int
 
     // A.2.11 I/O C Bindings
 

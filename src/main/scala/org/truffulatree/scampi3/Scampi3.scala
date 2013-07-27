@@ -11,6 +11,7 @@ trait Scampi3
     extends Exceptions
     with Enumerations
     with StatusComponent
+    with MessageComponent
     with NamedComponent
     with ErrHandlerComponent
     with ValueBufferComponent

@@ -1693,6 +1693,65 @@ trait CommComponent {
       else gathervOut(sendBuff, root)
     }
 
+    // scatter(), for root
+    def scatterOut(sendBuff: mpi2.ValueBuffer[_], sendCount: Int) {
+      require(
+        sendCount * remoteSize <= sendBuff.valueCount,
+        mpi2.scatterBufferSizeErrorMsg)
+      mpiCall(
+        mpi2.lib.MPI_Scatter(
+          sendBuff.pointer,
+          sendCount,
+          sendBuff.datatype.handle,
+          nullPointer[Byte],
+          0,
+          mpi2.lib.MPI_DATATYPE_NULL,
+          mpi2.lib.MPI_ROOT,
+          handle))
+    }
+
+    // scatter(), for non-root in sending group
+    def scatterOut() {
+      mpiCall(
+        mpi2.lib.MPI_Scatter(
+          nullPointer[Byte],
+          0,
+          mpi2.lib.MPI_DATATYPE_NULL,
+          nullPointer[Byte],
+          0,
+          mpi2.lib.MPI_DATATYPE_NULL,
+          mpi2.lib.MPI_PROC_NULL,
+          handle))
+    }
+
+    // scatter(), for any rank in receiving group
+    def scatterIn(buff: mpi2.ValueBuffer[_], root: mpi2.GroupRank) {
+      require(root.group == remoteGroup, "scatter root not in remote group")
+      mpiCall(
+        mpi2.lib.MPI_Scatter(
+          nullPointer[Byte],
+          0,
+          mpi2.lib.MPI_DATATYPE_NULL,
+          buff.pointer,
+          buff.valueCount,
+          buff.datatype.handle,
+          root.rank,
+          handle))
+    }
+
+    // scatter(), for any rank in either group
+    def scatter(
+        sendBuff: mpi2.ValueBuffer[_],
+        sendCount: Int,
+        recvBuff: mpi2.ValueBuffer[_],
+        root: mpi2.GroupRank) {
+      if (root.group == group) {
+        if (root.rank == rank) scatterOut(sendBuff, sendCount)
+        else scatterOut()
+      }
+      else scatterIn(recvBuff, root)
+    }
+
     // scatterv(), for root
     def scattervOut(sendBuff: mpi2.ValueBuffer[_], sendBlocks: Seq[mpi2.Block]) {
       require(sendBlocks.length == remoteSize, mpi2.scatterBufferSizeErrorMsg)
