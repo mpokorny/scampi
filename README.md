@@ -1,12 +1,12 @@
-ScaMPI: a Scala language interface to MPI-2
-===========================================
+ScaMPI: a Scala language interface to MPI
+=========================================
 
 ScaMPI does not provide an implementation of MPI; rather, it provides an interface to existing MPI libraries. Currently, the only MPI library tested is [mpich](http://www.mpich.org "mpich"), although it is likely that other, mpich-derived implementations would also work. Additional implementation libraries could be added with little additional Scala code. [BridJ](http://code.google.com/p/bridj "BridJ") is used for the glue between Scala and the MPI library; however, the code generation features of BridJ are not used given the well-defined MPI API.
 
 Installation
 ------------
 
-ScaMPI may be built and installed using [sbt](http://www.scala-sbt.org/ "sbt") (tested with v0.12.3).
+ScaMPI may be built and installed using [sbt](http://www.scala-sbt.org/ "sbt") (tested with v0.12.3 ad v0.12.4).
 
 Usage
 -----
@@ -21,13 +21,13 @@ Forcing multi-process unit tests (more or less required by MPI) into the sbt tes
 The test suite can only be run by launching sbt with mpiexec. The simplest way to run tests using your preferred MPI library is as follows
 
 ```
-SCAMPI2_LIBRARY_NAME=mpich mpiexec.hydra sbt -sbt-version 0.12.3 test
+SCAMPI2_LIBRARY_NAME=mpich mpiexec.hydra sbt -sbt-version 0.12.4 test
 ```
 
 or
 
 ```
-SCAMPI2_LIBRARY_NAME=openmpi mpiexec.openmpi sbt -sbt-version 0.12.3 test
+SCAMPI2_LIBRARY_NAME=openmpi mpiexec.openmpi sbt -sbt-version 0.12.4 test
 ```
 
 Running tests with OpenMPI's mpiexec will generate a (harmless) error message from mpiexec because the sbt process itself doesn't call MPI_Init or MPI_Finalize.
@@ -36,7 +36,6 @@ Future work
 -----------
 
 + Test with mvapich2
-+ Add interface for MPI-3 API
 
 Feedback
 --------
